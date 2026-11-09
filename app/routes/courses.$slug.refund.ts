@@ -30,7 +30,7 @@ const refundActionSchema = z.object({
   reason: z
     .string()
     .trim()
-    .min(10, "Tell us a little more about why you want to cancel.")
+    .min(10, "Tell us a little more about why you want a refund.")
     .max(1000, "Please keep your reason under 1000 characters."),
 });
 
@@ -58,7 +58,7 @@ function getLessonIdsForCourse(courseId: number): number[] {
   return rows.map((row) => row.id);
 }
 
-function getOpenRefund(purchaseId: number) {
+function getOpenRefundRequest(purchaseId: number) {
   return db
     .select()
     .from(refunds)
@@ -86,25 +86,25 @@ function lastDayOfWindow(purchasedAtIso: string): string {
 }
 
 /**
- * The confirmation the learner gets in their inbox. There is no mail
+ * The confirmation the buyer gets in their inbox. There is no mail
  * transport wired up yet, so the built message goes to the server log.
  */
-function buildReversalEmail(input: {
-  learnerName: string;
-  learnerEmail: string;
+function buildRefundRequestEmail(input: {
+  buyerName: string;
+  buyerEmail: string;
   courseTitle: string;
   amount: number;
 }) {
   return {
-    to: input.learnerEmail,
-    subject: `Reversal requested — ${input.courseTitle}`,
+    to: input.buyerEmail,
+    subject: `Refund requested — ${input.courseTitle}`,
     body: [
-      `Hi ${input.learnerName},`,
+      `Hi ${input.buyerName},`,
       "",
-      `We have your Reversal request for "${input.courseTitle}".`,
-      `The Reversal is for ${formatPrice(input.amount)}, the amount you paid.`,
+      `We have your Refund Request for "${input.courseTitle}".`,
+      `The Refund is for ${formatPrice(input.amount)}, the amount you paid.`,
       "",
-      "Our team reviews every Reversal by hand. You do not need to do anything else — we will email you again when it is done.",
+      "Our team reviews every Refund Request by hand. You do not need to do anything else — we will email you again when it is done.",
       "",
       "— The Cadence team",
     ].join("\n"),
@@ -115,7 +115,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   const currentUserId = await getCurrentUserId(request);
 
   if (!currentUserId) {
-    throw data("You must be logged in to cancel a purchase.", { status: 401 });
+    throw data("You must be logged in to request a refund.", { status: 401 });
   }
 
   const { slug } = parseParams(params, refundParamsSchema);
@@ -125,13 +125,13 @@ export async function action({ params, request }: Route.ActionArgs) {
     throw data("Course not found", { status: 404 });
   }
 
-  const learner = db
+  const buyer = db
     .select()
     .from(users)
     .where(eq(users.id, currentUserId))
     .get();
 
-  if (!learner) {
+  if (!buyer) {
     throw data("User not found", { status: 404 });
   }
 
@@ -141,14 +141,14 @@ export async function action({ params, request }: Route.ActionArgs) {
     throw data("You have not bought this course.", { status: 403 });
   }
 
-  if (getOpenRefund(purchase.id)) {
+  if (getOpenRefundRequest(purchase.id)) {
     throw data("You already have a request open on this purchase.", {
       status: 409,
     });
   }
 
   // A seat that came out of a team licence, and has been claimed, belongs to
-  // the team — the learner cannot hand it back on their own.
+  // the team — the buyer cannot hand it back on their own.
   const claimedSeat = db
     .select({ id: coupons.id })
     .from(coupons)
@@ -158,7 +158,7 @@ export async function action({ params, request }: Route.ActionArgs) {
     .get();
 
   if (claimedSeat) {
-    throw data("A claimed team seat cannot be cancelled.", { status: 403 });
+    throw data("A claimed team seat cannot be refunded.", { status: 403 });
   }
 
   const today = calendarDay(new Date());
@@ -195,7 +195,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   }
 
   if (watchedSeconds >= MAX_WATCHED_HOURS * 60 * 60) {
-    throw data("You have watched too much of this course to cancel it.", {
+    throw data("You have watched too much of this course to request a refund.", {
       status: 403,
     });
   }
@@ -222,9 +222,9 @@ export async function action({ params, request }: Route.ActionArgs) {
     .returning()
     .get();
 
-  const email = buildReversalEmail({
-    learnerName: learner.name,
-    learnerEmail: learner.email,
+  const email = buildRefundRequestEmail({
+    buyerName: buyer.name,
+    buyerEmail: buyer.email,
     courseTitle: course.title,
     amount: refundableAmount,
   });
