@@ -15,7 +15,7 @@ The full amount paid for a purchase, returned to its Buyer when a Refund Request
 _Avoid_: Reversal, Chargeback, Cancellation
 
 **Refund Eligibility**:
-The single set of conditions a purchase must meet for its Buyer to raise a Refund Request.
+The single set of conditions a purchase must meet for its Buyer to raise a Refund Request. An Own Purchase is judged by how much of the course its Buyer has taken; a Team Purchase qualifies only while none of its Seats is claimed, and no Seat can be claimed while it has a Refund Request open.
 _Avoid_: Cancellation offer, cancel window
 
 ### Purchases

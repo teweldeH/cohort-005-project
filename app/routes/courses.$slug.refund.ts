@@ -7,18 +7,17 @@ import { courses, purchases, refunds, users, RefundStatus } from "~/db/schema";
 import { and, eq } from "drizzle-orm";
 import { parseFormData, parseParams } from "~/lib/validation";
 import { formatPrice } from "~/lib/utils";
-import { REFUND_WINDOW_DAYS, type RefundIneligibleReason } from "~/lib/refunds";
-import { getRefundEligibility } from "~/lib/refunds.server";
+import {
+  isTeamPurchase,
+  REFUND_WINDOW_DAYS,
+  type RefundIneligibleReason,
+} from "~/lib/refunds";
+import { getRefundEligibility, getSeatCounts } from "~/lib/refunds.server";
 
 const INELIGIBLE_RESPONSES: Record<
   RefundIneligibleReason,
   { message: string; status: number }
 > = {
-  // Team Purchases get their own way in (#6).
-  "team-purchase": {
-    message: "A Team Purchase can't be refunded here.",
-    status: 403,
-  },
   free: { message: "A free purchase has nothing to refund.", status: 403 },
   "request-open": {
     message: "You already have a request open on this purchase.",
@@ -34,6 +33,11 @@ const INELIGIBLE_RESPONSES: Record<
   },
   "too-much-watched": {
     message: "You have watched too much of this course to request a refund.",
+    status: 403,
+  },
+  "seat-claimed": {
+    message:
+      "A Seat on this purchase has been claimed, so it can't be refunded.",
     status: 403,
   },
 };
@@ -183,5 +187,8 @@ export async function action({ params, request }: Route.ActionArgs) {
     `[email] to=${email.to} subject=${email.subject}\n${email.body}`
   );
 
-  return redirect("/settings");
+  // A Team Purchase's Buyer asked from /team, so that is where they go back.
+  return redirect(
+    isTeamPurchase(getSeatCounts(purchase.id)) ? "/team" : "/settings"
+  );
 }
