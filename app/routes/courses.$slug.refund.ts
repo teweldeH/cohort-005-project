@@ -14,15 +14,22 @@ import {
   videoWatchEvents,
   RefundStatus,
 } from "~/db/schema";
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { parseFormData, parseParams } from "~/lib/validation";
 import { formatPrice } from "~/lib/utils";
+import { isTeamPurchase } from "~/lib/refunds";
 
 const REFUND_WINDOW_DAYS = 14;
 const MAX_WATCHED_HOURS = 2;
 
 const refundParamsSchema = z.object({
   slug: z.string().min(1),
+});
+
+// The purchase the Refund Request is for, named by the form so that a Buyer
+// with several purchases of one course gets the one they asked about.
+const refundPurchaseSchema = z.object({
+  purchaseId: z.coerce.number().int().positive(),
 });
 
 const refundActionSchema = z.object({
@@ -37,12 +44,21 @@ function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
 }
 
-function getLatestPurchase(userId: number, courseId: number) {
+function getBuyerPurchase(
+  purchaseId: number,
+  userId: number,
+  courseId: number
+) {
   return db
     .select()
     .from(purchases)
-    .where(and(eq(purchases.userId, userId), eq(purchases.courseId, courseId)))
-    .orderBy(sql`${purchases.createdAt} desc`)
+    .where(
+      and(
+        eq(purchases.id, purchaseId),
+        eq(purchases.userId, userId),
+        eq(purchases.courseId, courseId)
+      )
+    )
     .get();
 }
 
@@ -92,6 +108,7 @@ function buildRefundRequestEmail(input: {
   buyerName: string;
   buyerEmail: string;
   courseTitle: string;
+  purchasedAt: string;
   amount: number;
 }) {
   return {
@@ -100,7 +117,7 @@ function buildRefundRequestEmail(input: {
     body: [
       `Hi ${input.buyerName},`,
       "",
-      `We have your Refund Request for "${input.courseTitle}".`,
+      `We have your Refund Request for "${input.courseTitle}", for your purchase on ${new Date(input.purchasedAt).toLocaleDateString()}.`,
       `The Refund is for ${formatPrice(input.amount)}, the amount you paid.`,
       "",
       "Our team reviews every Refund Request by hand. You do not need to do anything else — we will email you again when it is done.",
@@ -134,10 +151,23 @@ export async function action({ params, request }: Route.ActionArgs) {
     throw data("User not found", { status: 404 });
   }
 
-  const purchase = getLatestPurchase(currentUserId, course.id);
+  const formData = await request.formData();
+  const purchaseChoice = parseFormData(formData, refundPurchaseSchema);
+
+  if (!purchaseChoice.success) {
+    throw data("Choose the purchase you want refunded.", { status: 400 });
+  }
+
+  const purchase = getBuyerPurchase(
+    purchaseChoice.data.purchaseId,
+    currentUserId,
+    course.id
+  );
 
   if (!purchase) {
-    throw data("You have not bought this course.", { status: 403 });
+    throw data("That purchase is not one of yours for this course.", {
+      status: 403,
+    });
   }
 
   if (getOpenRefundRequest(purchase.id)) {
@@ -146,18 +176,16 @@ export async function action({ params, request }: Route.ActionArgs) {
     });
   }
 
-  // A seat that came out of a team licence, and has been claimed, belongs to
-  // the team — the buyer cannot hand it back on their own.
-  const claimedSeat = db
-    .select({ id: coupons.id })
+  // Only an Own Purchase can be refunded here, matching what the course page
+  // offers. Team Purchases get their own way in (#6).
+  const seatCount = db
+    .select({ seats: sql<number>`count(*)` })
     .from(coupons)
-    .where(
-      and(eq(coupons.purchaseId, purchase.id), isNotNull(coupons.redeemedAt))
-    )
+    .where(eq(coupons.purchaseId, purchase.id))
     .get();
 
-  if (claimedSeat) {
-    throw data("A claimed team seat cannot be refunded.", { status: 403 });
+  if (isTeamPurchase({ seats: seatCount?.seats ?? 0 })) {
+    throw data("A Team Purchase can't be refunded here.", { status: 403 });
   }
 
   const today = calendarDay(new Date());
@@ -199,7 +227,6 @@ export async function action({ params, request }: Route.ActionArgs) {
     });
   }
 
-  const formData = await request.formData();
   const parsed = parseFormData(formData, refundActionSchema);
 
   if (!parsed.success) {
@@ -220,7 +247,7 @@ export async function action({ params, request }: Route.ActionArgs) {
     buyerName: buyer.name,
     buyerEmail: buyer.email,
     courseTitle: course.title,
-    // A Refund is the whole amount paid — a Team Purchase gives back every Seat.
+    purchasedAt: purchase.createdAt,
     amount: purchase.amountPaid,
   });
 

@@ -20,6 +20,10 @@ _Avoid_: Cancellation offer, cancel window
 
 ### Purchases
 
+**Own Purchase**:
+A Buyer's purchase of a course for themselves, which covers no Seats.
+_Avoid_: Personal purchase, individual purchase
+
 **Team Purchase**:
 A single purchase by a Buyer that covers several Seats for one course.
 

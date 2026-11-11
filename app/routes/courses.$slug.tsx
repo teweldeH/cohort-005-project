@@ -21,7 +21,7 @@ import {
   LessonProgressStatus,
   RefundStatus,
 } from "~/db/schema";
-import { eq, and, or, sql, inArray, isNotNull } from "drizzle-orm";
+import { eq, and, or, sql, inArray } from "drizzle-orm";
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -46,6 +46,7 @@ import { CourseImage } from "~/components/course-image";
 import { UserAvatar } from "~/components/user-avatar";
 import { Textarea } from "~/components/ui/textarea";
 import { data, isRouteErrorResponse } from "react-router";
+import { findOwnPurchase } from "~/lib/refunds";
 import { formatDuration, formatPrice } from "~/lib/utils";
 import { renderMarkdown } from "~/lib/markdown.server";
 import { resolveCountry } from "~/lib/country.server";
@@ -367,13 +368,21 @@ const REFUND_WINDOW_DAYS = 14;
 const REFUND_WATCH_LIMIT_SECONDS = 2 * 60 * 60;
 const REFUND_COMPLETION_LIMIT = 0.5;
 
-function getPurchaseForCourse(userId: number, courseId: number) {
-  return db
-    .select()
+function getOwnPurchase(userId: number, courseId: number) {
+  const buyerPurchases = db
+    .select({
+      id: purchases.id,
+      createdAt: purchases.createdAt,
+      amountPaid: purchases.amountPaid,
+      seats: sql<number>`count(${coupons.id})`,
+    })
     .from(purchases)
+    .leftJoin(coupons, eq(coupons.purchaseId, purchases.id))
     .where(and(eq(purchases.userId, userId), eq(purchases.courseId, courseId)))
-    .orderBy(sql`${purchases.createdAt} desc`)
-    .get();
+    .groupBy(purchases.id)
+    .all();
+
+  return findOwnPurchase(buyerPurchases);
 }
 
 function getOpenRefundRequest(purchaseId: number) {
@@ -437,11 +446,12 @@ function asDayString(when: Date) {
 }
 
 /**
- * What the Buyer is offered if they want their money back, or null if this
- * purchase cannot be refunded.
+ * What the Buyer is offered if they want their money back for their Own
+ * Purchase, or null if it cannot be refunded. A Team Purchase is not offered
+ * here: this page is about the Buyer's own access.
  */
 function getRefundOffer(userId: number, courseId: number) {
-  const purchase = getPurchaseForCourse(userId, courseId);
+  const purchase = getOwnPurchase(userId, courseId);
 
   if (!purchase) return null;
   if (getOpenRefundRequest(purchase.id)) return null;
@@ -469,18 +479,12 @@ function getRefundOffer(userId: number, courseId: number) {
     return null;
   }
 
-  const claimedSeat = db
-    .select({ id: coupons.id })
-    .from(coupons)
-    .where(
-      and(eq(coupons.purchaseId, purchase.id), isNotNull(coupons.redeemedAt))
-    )
-    .get();
-
-  if (claimedSeat) return null;
-
-  // A Refund is the whole amount paid — a Team Purchase gives back every Seat.
-  return { amount: purchase.amountPaid, lastDayInWindow };
+  return {
+    purchaseId: purchase.id,
+    purchasedAt: purchase.createdAt,
+    amount: purchase.amountPaid,
+    lastDayInWindow,
+  };
 }
 
 const ratingSchema = z.object({
@@ -515,7 +519,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   let progress = 0;
   let lessonProgressMap: Record<number, string> = {};
   let nextLessonId: number | null = null;
-  let refundOffer: { amount: number; lastDayInWindow: string } | null = null;
+  let refundOffer: ReturnType<typeof getRefundOffer> = null;
 
   if (currentUserId) {
     enrolled = isUserEnrolled(currentUserId, course.id);
@@ -903,10 +907,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
                   </Link>
                   <RateCourse userRating={userRating} />
                   {refundOffer && (
-                    <RequestRefund
-                      slug={course.slug}
-                      amount={refundOffer.amount}
-                    />
+                    <RequestRefund slug={course.slug} offer={refundOffer} />
                   )}
                 </>
               ) : (
@@ -979,7 +980,13 @@ function RateCourse({ userRating }: { userRating: number | null }) {
   );
 }
 
-function RequestRefund({ slug, amount }: { slug: string; amount: number }) {
+function RequestRefund({
+  slug,
+  offer,
+}: {
+  slug: string;
+  offer: NonNullable<ReturnType<typeof getRefundOffer>>;
+}) {
   const fetcher = useFetcher<{ errors?: Record<string, string> }>();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const isSubmitting = fetcher.state !== "idle";
@@ -1010,14 +1017,17 @@ function RequestRefund({ slug, amount }: { slug: string; amount: number }) {
     <div className="border-t pt-4">
       <p className="mb-2 text-sm font-medium">Request a refund</p>
       <p className="mb-3 text-xs text-muted-foreground">
-        We will send {formatPrice(amount)} back to the card you paid with, once
-        someone has read your note.
+        For your purchase on{" "}
+        {new Date(offer.purchasedAt).toLocaleDateString()}. We will send{" "}
+        {formatPrice(offer.amount)} back to the card you paid with, once someone
+        has read your note.
       </p>
       <fetcher.Form
         method="post"
         action={`/courses/${slug}/refund`}
         className="space-y-2"
       >
+        <input type="hidden" name="purchaseId" value={offer.purchaseId} />
         <Textarea
           name="reason"
           rows={3}
