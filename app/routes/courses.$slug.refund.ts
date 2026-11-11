@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Route } from "./+types/courses.$slug.refund";
 import { getCurrentUserId } from "~/lib/session";
 import { db } from "~/db";
-import { courses, purchases, refunds, users, RefundStatus } from "~/db/schema";
+import { courses, purchases, refundRequests, users, RefundRequestStatus } from "~/db/schema";
 import { and, eq } from "drizzle-orm";
 import { parseFormData, parseParams } from "~/lib/validation";
 import { formatPrice } from "~/lib/utils";
@@ -174,10 +174,10 @@ export async function action({ params, request }: Route.ActionArgs) {
   }
 
   db
-    .insert(refunds)
+    .insert(refundRequests)
     .values({
       purchaseId: purchase.id,
-      status: RefundStatus.Requested,
+      status: RefundRequestStatus.Requested,
       reason: parsed.data.reason,
     })
     .returning()

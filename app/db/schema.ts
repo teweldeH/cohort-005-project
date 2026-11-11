@@ -31,15 +31,10 @@ export enum QuestionType {
   TrueFalse = "true_false",
 }
 
-export enum RefundStatus {
+export enum RefundRequestStatus {
   Requested = "requested",
   Approved = "approved",
   Declined = "declined",
-}
-
-export enum TeamMemberRole {
-  Admin = "admin",
-  Member = "member",
 }
 
 // ─── Tables ───
@@ -229,8 +224,8 @@ export const purchases = sqliteTable(
   (table) => [index("purchases_course_idx").on(table.courseId)]
 );
 
-export const refunds = sqliteTable(
-  "refunds",
+export const refundRequests = sqliteTable(
+  "refund_requests",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     purchaseId: integer("purchase_id")
@@ -238,8 +233,8 @@ export const refunds = sqliteTable(
       .references(() => purchases.id),
     status: text("status")
       .notNull()
-      .$type<RefundStatus>()
-      .default(RefundStatus.Requested),
+      .$type<RefundRequestStatus>()
+      .default(RefundRequestStatus.Requested),
     // The Buyer's own words, in the box on the course page.
     reason: text("reason").notNull(),
     // Null until someone approves — a declined request refunds nothing.
@@ -253,7 +248,7 @@ export const refunds = sqliteTable(
     // Approval.
     decisionNote: text("decision_note"),
   },
-  (table) => [index("refunds_purchase_idx").on(table.purchaseId)]
+  (table) => [index("refund_requests_purchase_idx").on(table.purchaseId)]
 );
 
 export const teams = sqliteTable("teams", {
@@ -271,13 +266,12 @@ export const teamMembers = sqliteTable("team_members", {
   userId: integer("user_id")
     .notNull()
     .references(() => users.id),
-  role: text("role").notNull().$type<TeamMemberRole>(),
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
 });
 
-export const coupons = sqliteTable("coupons", {
+export const seats = sqliteTable("seats", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   teamId: integer("team_id")
     .notNull()
@@ -289,8 +283,8 @@ export const coupons = sqliteTable("coupons", {
   purchaseId: integer("purchase_id")
     .notNull()
     .references(() => purchases.id),
-  redeemedByUserId: integer("redeemed_by_user_id").references(() => users.id),
-  redeemedAt: text("redeemed_at"),
+  claimedByUserId: integer("claimed_by_user_id").references(() => users.id),
+  claimedAt: text("claimed_at"),
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),

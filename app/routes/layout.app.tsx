@@ -15,7 +15,6 @@ import {
   lessonProgress,
   teams,
   teamMembers,
-  TeamMemberRole,
   LessonProgressStatus,
 } from "~/db/schema";
 
@@ -27,16 +26,11 @@ function getUserById(id: number) {
   return db.select().from(users).where(eq(users.id, id)).get();
 }
 
-function getTeamForAdmin(userId: number) {
+function getTeamForBuyer(userId: number) {
   const membership = db
     .select()
     .from(teamMembers)
-    .where(
-      and(
-        eq(teamMembers.userId, userId),
-        eq(teamMembers.role, TeamMemberRole.Admin)
-      )
-    )
+    .where(eq(teamMembers.userId, userId))
     .get();
 
   if (!membership) return undefined;
@@ -45,7 +39,7 @@ function getTeamForAdmin(userId: number) {
 }
 
 function isTeamAdmin(userId: number) {
-  return !!getTeamForAdmin(userId);
+  return !!getTeamForBuyer(userId);
 }
 
 function getCourseLessonIds(courseId: number): number[] {

@@ -15,7 +15,7 @@ import {
   lessonProgress,
   courseRatings,
   purchases,
-  coupons,
+  seats,
   LessonProgressStatus,
 } from "~/db/schema";
 import { eq, and, or, sql } from "drizzle-orm";
@@ -368,10 +368,10 @@ function getOwnPurchase(userId: number, courseId: number) {
       id: purchases.id,
       createdAt: purchases.createdAt,
       amountPaid: purchases.amountPaid,
-      seats: sql<number>`count(${coupons.id})`,
+      seats: sql<number>`count(${seats.id})`,
     })
     .from(purchases)
-    .leftJoin(coupons, eq(coupons.purchaseId, purchases.id))
+    .leftJoin(seats, eq(seats.purchaseId, purchases.id))
     .where(and(eq(purchases.userId, userId), eq(purchases.courseId, courseId)))
     .groupBy(purchases.id)
     .all();

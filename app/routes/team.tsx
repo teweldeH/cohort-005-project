@@ -10,12 +10,11 @@ import { db } from "~/db";
 import {
   teams,
   teamMembers,
-  coupons,
+  seats,
   courses,
   purchases,
   users,
-  TeamMemberRole,
-  RefundStatus,
+  RefundRequestStatus,
 } from "~/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { RequestRefund } from "~/components/request-refund";
@@ -25,16 +24,11 @@ import {
 } from "~/lib/refunds.server";
 import { formatPrice } from "~/lib/utils";
 
-function getTeamForAdmin(userId: number) {
+function getTeamForBuyer(userId: number) {
   const membership = db
     .select()
     .from(teamMembers)
-    .where(
-      and(
-        eq(teamMembers.userId, userId),
-        eq(teamMembers.role, TeamMemberRole.Admin)
-      )
-    )
+    .where(eq(teamMembers.userId, userId))
     .get();
 
   if (!membership) return undefined;
@@ -42,8 +36,8 @@ function getTeamForAdmin(userId: number) {
   return db.select().from(teams).where(eq(teams.id, membership.teamId)).get();
 }
 
-function getCouponsForTeam(teamId: number) {
-  return db.select().from(coupons).where(eq(coupons.teamId, teamId)).all();
+function getSeatsForTeam(teamId: number) {
+  return db.select().from(seats).where(eq(seats.teamId, teamId)).all();
 }
 
 function getCourseById(id: number) {
@@ -83,15 +77,15 @@ interface TeamPurchaseRow {
   totalSeats: number;
   claimedSeats: number;
   canRequestRefund: boolean;
-  refundRequestStatus: RefundStatus | null;
+  refundRequestStatus: RefundRequestStatus | null;
 }
 
-interface CouponRow {
+interface SeatRow {
   id: number;
   code: string;
   courseId: number;
   courseTitle: string;
-  redeemedByEmail: string | null;
+  claimedByEmail: string | null;
   refunded: boolean;
   createdAt: string;
 }
@@ -110,7 +104,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("Select a user from the DevUI panel.", { status: 401 });
   }
 
-  const team = getTeamForAdmin(currentUserId);
+  const team = getTeamForBuyer(currentUserId);
 
   if (!team) {
     throw data("You don't have a team. Purchase team seats to create one.", {
@@ -118,7 +112,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   }
 
-  const allCoupons = getCouponsForTeam(team.id);
+  const allSeats = getSeatsForTeam(team.id);
 
   // Build per-course stats
   const courseMap = new Map<
@@ -132,20 +126,20 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   >();
 
-  for (const coupon of allCoupons) {
-    if (!courseMap.has(coupon.courseId)) {
-      const course = getCourseById(coupon.courseId);
-      courseMap.set(coupon.courseId, {
-        courseId: coupon.courseId,
+  for (const seat of allSeats) {
+    if (!courseMap.has(seat.courseId)) {
+      const course = getCourseById(seat.courseId);
+      courseMap.set(seat.courseId, {
+        courseId: seat.courseId,
         courseTitle: course?.title ?? "Unknown Course",
         courseSlug: course?.slug ?? "",
         total: 0,
         claimed: 0,
       });
     }
-    const entry = courseMap.get(coupon.courseId)!;
+    const entry = courseMap.get(seat.courseId)!;
     entry.total++;
-    if (coupon.redeemedByUserId !== null) {
+    if (seat.claimedByUserId !== null) {
       entry.claimed++;
     }
   }
@@ -160,41 +154,41 @@ export async function loader({ request }: Route.LoaderArgs) {
     })
   );
 
-  // Build coupon rows with redeemer email
+  // Build Seat rows with claimer email
   const refundRequestStatuses = new Map(
-    [...new Set(allCoupons.map((c) => c.purchaseId))].map((purchaseId) => [
+    [...new Set(allSeats.map((c) => c.purchaseId))].map((purchaseId) => [
       purchaseId,
       getRefundRequestStatus(purchaseId),
     ])
   );
 
-  const couponRows: CouponRow[] = allCoupons.map((coupon) => {
-    let redeemedByEmail: string | null = null;
-    if (coupon.redeemedByUserId !== null) {
-      const user = getUserById(coupon.redeemedByUserId);
-      redeemedByEmail = user?.email ?? null;
+  const seatRows: SeatRow[] = allSeats.map((seat) => {
+    let claimedByEmail: string | null = null;
+    if (seat.claimedByUserId !== null) {
+      const user = getUserById(seat.claimedByUserId);
+      claimedByEmail = user?.email ?? null;
     }
-    const course = getCourseById(coupon.courseId);
+    const course = getCourseById(seat.courseId);
     return {
-      id: coupon.id,
-      code: coupon.code,
-      courseId: coupon.courseId,
+      id: seat.id,
+      code: seat.code,
+      courseId: seat.courseId,
       courseTitle: course?.title ?? "Unknown Course",
-      redeemedByEmail,
+      claimedByEmail,
       refunded:
-        refundRequestStatuses.get(coupon.purchaseId) === RefundStatus.Approved,
-      createdAt: coupon.createdAt,
+        refundRequestStatuses.get(seat.purchaseId) === RefundRequestStatus.Approved,
+      createdAt: seat.createdAt,
     };
   });
 
   // The Team Purchases this Buyer paid for, each refunded whole or not at all.
-  const purchaseIds = [...new Set(allCoupons.map((c) => c.purchaseId))];
+  const purchaseIds = [...new Set(allSeats.map((c) => c.purchaseId))];
   const teamPurchases: TeamPurchaseRow[] = getBuyerPurchases(
     currentUserId,
     purchaseIds
   )
     .map((purchase) => {
-      const seats = allCoupons.filter((c) => c.purchaseId === purchase.id);
+      const purchaseSeats = allSeats.filter((c) => c.purchaseId === purchase.id);
       const course = getCourseById(purchase.courseId);
       const eligibility = getRefundEligibility(
         purchase,
@@ -207,15 +201,15 @@ export async function loader({ request }: Route.LoaderArgs) {
         courseSlug: course?.slug ?? "",
         purchasedAt: purchase.createdAt,
         amount: purchase.amountPaid,
-        totalSeats: seats.length,
-        claimedSeats: seats.filter((c) => c.redeemedByUserId !== null).length,
+        totalSeats: purchaseSeats.length,
+        claimedSeats: purchaseSeats.filter((c) => c.claimedByUserId !== null).length,
         canRequestRefund: eligibility.eligible,
         refundRequestStatus: refundRequestStatuses.get(purchase.id) ?? null,
       };
     })
     .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt));
 
-  return { courseStats, teamPurchases, couponRows };
+  return { courseStats, teamPurchases, seatRows };
 }
 
 function CopyButton({ code }: { code: string }) {
@@ -251,13 +245,13 @@ function CopyButton({ code }: { code: string }) {
 }
 
 export default function Team({ loaderData }: Route.ComponentProps) {
-  const { courseStats, teamPurchases, couponRows } = loaderData;
+  const { courseStats, teamPurchases, seatRows } = loaderData;
   const [courseFilter, setCourseFilter] = useState<number | "all">("all");
 
-  const filteredCoupons =
+  const filteredSeats =
     courseFilter === "all"
-      ? couponRows
-      : couponRows.filter((c) => c.courseId === courseFilter);
+      ? seatRows
+      : seatRows.filter((c) => c.courseId === courseFilter);
 
   return (
     <div className="mx-auto max-w-7xl p-6 lg:p-8">
@@ -337,16 +331,16 @@ export default function Team({ loaderData }: Route.ComponentProps) {
                       offer={purchase}
                     />
                   ) : purchase.refundRequestStatus ===
-                    RefundStatus.Requested ? (
+                    RefundRequestStatus.Requested ? (
                     <p className="border-t pt-4 text-xs text-muted-foreground">
                       Refund requested. Its seats can&apos;t be claimed until we
                       have reviewed it.
                     </p>
-                  ) : purchase.refundRequestStatus === RefundStatus.Approved ? (
+                  ) : purchase.refundRequestStatus === RefundRequestStatus.Approved ? (
                     <p className="border-t pt-4 text-xs text-muted-foreground">
                       Refunded. Its seats can no longer be claimed.
                     </p>
-                  ) : purchase.refundRequestStatus === RefundStatus.Declined ? (
+                  ) : purchase.refundRequestStatus === RefundRequestStatus.Declined ? (
                     <p className="border-t pt-4 text-xs text-muted-foreground">
                       Your Refund Request was declined.{" "}
                       <Link to="/settings" className="underline">
@@ -386,7 +380,7 @@ export default function Team({ loaderData }: Route.ComponentProps) {
           )}
         </div>
 
-        {filteredCoupons.length === 0 ? (
+        {filteredSeats.length === 0 ? (
           <p className="text-sm text-muted-foreground">No coupons yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-md border">
@@ -400,22 +394,22 @@ export default function Team({ loaderData }: Route.ComponentProps) {
                 </tr>
               </thead>
               <tbody>
-                {filteredCoupons.map((coupon) => (
-                  <tr key={coupon.id} className="border-b last:border-0">
+                {filteredSeats.map((seat) => (
+                  <tr key={seat.id} className="border-b last:border-0">
                     <td className="px-4 py-3">
                       <code className="rounded bg-muted px-2 py-0.5 text-xs">
-                        {coupon.code}
+                        {seat.code}
                       </code>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {coupon.courseTitle}
+                      {seat.courseTitle}
                     </td>
                     <td className="px-4 py-3">
-                      {coupon.redeemedByEmail ? (
+                      {seat.claimedByEmail ? (
                         <span className="text-muted-foreground">
-                          Claimed by {coupon.redeemedByEmail}
+                          Claimed by {seat.claimedByEmail}
                         </span>
-                      ) : coupon.refunded ? (
+                      ) : seat.refunded ? (
                         <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                           Refunded
                         </span>
@@ -426,8 +420,8 @@ export default function Team({ loaderData }: Route.ComponentProps) {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {!coupon.redeemedByEmail && !coupon.refunded && (
-                        <CopyButton code={coupon.code} />
+                      {!seat.claimedByEmail && !seat.refunded && (
+                        <CopyButton code={seat.code} />
                       )}
                     </td>
                   </tr>
