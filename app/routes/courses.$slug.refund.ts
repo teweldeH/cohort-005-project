@@ -16,7 +16,6 @@ import {
 } from "~/db/schema";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { parseFormData, parseParams } from "~/lib/validation";
-import { getDiscountForCountry } from "~/lib/ppp";
 import { formatPrice } from "~/lib/utils";
 
 const REFUND_WINDOW_DAYS = 14;
@@ -200,11 +199,6 @@ export async function action({ params, request }: Route.ActionArgs) {
     });
   }
 
-  // A purchase made at a purchasing-power price is given back at that price,
-  // not at the list price of the course.
-  const pppDiscount = getDiscountForCountry(purchase.country);
-  const refundableAmount = pppDiscount > 0 ? purchase.amountPaid : course.price;
-
   const formData = await request.formData();
   const parsed = parseFormData(formData, refundActionSchema);
 
@@ -226,7 +220,8 @@ export async function action({ params, request }: Route.ActionArgs) {
     buyerName: buyer.name,
     buyerEmail: buyer.email,
     courseTitle: course.title,
-    amount: refundableAmount,
+    // A Refund is the whole amount paid — a Team Purchase gives back every Seat.
+    amount: purchase.amountPaid,
   });
 
   console.log(

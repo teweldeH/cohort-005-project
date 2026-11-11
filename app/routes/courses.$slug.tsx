@@ -49,11 +49,7 @@ import { data, isRouteErrorResponse } from "react-router";
 import { formatDuration, formatPrice } from "~/lib/utils";
 import { renderMarkdown } from "~/lib/markdown.server";
 import { resolveCountry } from "~/lib/country.server";
-import {
-  calculatePppPrice,
-  getCountryTierInfo,
-  getDiscountForCountry,
-} from "~/lib/ppp";
+import { calculatePppPrice, getCountryTierInfo } from "~/lib/ppp";
 import { parseFormData } from "~/lib/validation";
 import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
 import { StarRating, StarRatingInput } from "~/components/star-rating";
@@ -444,11 +440,8 @@ function asDayString(when: Date) {
  * What the Buyer is offered if they want their money back, or null if this
  * purchase cannot be refunded.
  */
-function getRefundOffer(
-  userId: number,
-  course: { id: number; price: number }
-) {
-  const purchase = getPurchaseForCourse(userId, course.id);
+function getRefundOffer(userId: number, courseId: number) {
+  const purchase = getPurchaseForCourse(userId, courseId);
 
   if (!purchase) return null;
   if (getOpenRefundRequest(purchase.id)) return null;
@@ -463,7 +456,7 @@ function getRefundOffer(
 
   if (!isWithinWindow) return null;
 
-  const lessonIds = getCourseLessonIds(course.id);
+  const lessonIds = getCourseLessonIds(courseId);
 
   if (lessonIds.length > 0) {
     const completedCount = getCompletedLessonCount(userId, lessonIds);
@@ -486,12 +479,8 @@ function getRefundOffer(
 
   if (claimedSeat) return null;
 
-  // A purchasing-power price is given back at the price that was paid, not at
-  // the list price of the course.
-  const pppDiscount = getDiscountForCountry(purchase.country);
-  const amount = pppDiscount > 0 ? purchase.amountPaid : course.price;
-
-  return { amount, lastDayInWindow };
+  // A Refund is the whole amount paid — a Team Purchase gives back every Seat.
+  return { amount: purchase.amountPaid, lastDayInWindow };
 }
 
 const ratingSchema = z.object({
@@ -532,10 +521,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     enrolled = isUserEnrolled(currentUserId, course.id);
 
     if (enrolled) {
-      refundOffer = getRefundOffer(currentUserId, {
-        id: course.id,
-        price: courseWithDetails.price,
-      });
+      refundOffer = getRefundOffer(currentUserId, course.id);
 
       progress = calculateProgress(currentUserId, course.id, false);
 
