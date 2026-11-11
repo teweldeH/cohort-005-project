@@ -18,6 +18,15 @@ _Avoid_: Reversal, Chargeback, Cancellation
 The single set of conditions a purchase must meet for its Buyer to raise a Refund Request.
 _Avoid_: Cancellation offer, cancel window
 
+### Purchases
+
+**Team Purchase**:
+A single purchase by a Buyer that covers several Seats for one course.
+
+**Seat**:
+One person's access to a course from a Team Purchase, either unclaimed or claimed.
+_Avoid_: Coupon, licence
+
 ### People
 
 **Buyer**:
