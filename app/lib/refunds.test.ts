@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { RefundStatus } from "~/db/schema";
 import { checkRefundEligibility, findOwnPurchase } from "./refunds";
 
 describe("findOwnPurchase", () => {
@@ -41,7 +42,7 @@ describe("checkRefundEligibility", () => {
   const facts = {
     purchasedAt: new Date(2026, 10, 1, 23, 0).toISOString(),
     amountPaid: 5000,
-    hasOpenRefundRequest: false,
+    refundRequestStatus: null,
     usage: learning,
   };
   const now = new Date(2026, 10, 5, 12, 0);
@@ -111,8 +112,30 @@ describe("checkRefundEligibility", () => {
 
   it("refuses while a Refund Request is already open", () => {
     expect(
-      checkRefundEligibility({ ...facts, hasOpenRefundRequest: true }, now)
+      checkRefundEligibility(
+        { ...facts, refundRequestStatus: RefundStatus.Requested },
+        now
+      )
     ).toEqual({ eligible: false, reason: "request-open" });
+  });
+
+  it("refuses a purchase that has already been refunded", () => {
+    expect(
+      checkRefundEligibility(
+        { ...facts, refundRequestStatus: RefundStatus.Approved },
+        now
+      )
+    ).toEqual({ eligible: false, reason: "refunded" });
+  });
+
+  it("refuses again once a Refund Request is Declined, which is final", () => {
+    // Still inside the window and barely started, but the decision stands.
+    expect(
+      checkRefundEligibility(
+        { ...facts, refundRequestStatus: RefundStatus.Declined },
+        now
+      )
+    ).toEqual({ eligible: false, reason: "declined" });
   });
 
   describe("for a Team Purchase", () => {

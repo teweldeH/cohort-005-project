@@ -21,7 +21,7 @@ import {
 import { AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse, Link } from "react-router";
 import { db } from "~/db";
-import { and, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { formatPrice } from "~/lib/utils";
 
 const settingsSchema = z.object({
@@ -55,9 +55,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("User not found.", { status: 404 });
   }
 
-  const pendingRefundRequests = db
+  // Open ones first, then decided ones newest first. A decision is told to
+  // the Buyer here, since outcome emails only reach the server log for now.
+  const refundRequests = db
     .select({
       id: refunds.id,
+      status: refunds.status,
+      decisionNote: refunds.decisionNote,
+      amountRefunded: refunds.amountRefunded,
+      resolvedAt: refunds.resolvedAt,
       courseTitle: courses.title,
       courseSlug: courses.slug,
       amountPaid: purchases.amountPaid,
@@ -68,11 +74,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     .from(refunds)
     .innerJoin(purchases, eq(refunds.purchaseId, purchases.id))
     .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(
-      and(
-        eq(purchases.userId, currentUserId),
-        eq(refunds.status, RefundStatus.Requested)
-      )
+    .where(eq(purchases.userId, currentUserId))
+    .orderBy(
+      sql`${refunds.status} != ${RefundStatus.Requested}`,
+      desc(refunds.resolvedAt),
+      desc(refunds.requestedAt)
     )
     .all();
 
@@ -84,7 +90,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       bio: currentUser.bio,
       role: currentUser.role,
     },
-    pendingRefundRequests,
+    refundRequests,
   };
 }
 
@@ -123,7 +129,10 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { user, pendingRefundRequests } = loaderData;
+  const { user, refundRequests } = loaderData;
+  const waitingCount = refundRequests.filter(
+    (refundRequest) => refundRequest.status === RefundStatus.Requested
+  ).length;
   const fetcher = useFetcher();
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -210,18 +219,20 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
         </CardContent>
       </Card>
 
-      {pendingRefundRequests.length > 0 && (
+      {refundRequests.length > 0 && (
         <Card className="mt-8 max-w-md">
           <CardHeader>
-            <h2 className="text-lg font-semibold">Pending Refund Request</h2>
+            <h2 className="text-lg font-semibold">Refund Requests</h2>
             <p className="text-sm text-muted-foreground">
-              {pendingRefundRequests.length === 1
-                ? "One Refund Request is waiting on us."
-                : `${pendingRefundRequests.length} Refund Requests are waiting on us.`}
+              {waitingCount === 0
+                ? "Nothing is waiting on us."
+                : waitingCount === 1
+                  ? "One Refund Request is waiting on us."
+                  : `${waitingCount} Refund Requests are waiting on us.`}
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            {pendingRefundRequests.map((refundRequest) => (
+            {refundRequests.map((refundRequest) => (
               <div key={refundRequest.id} className="rounded-md border p-3">
                 <div className="flex items-start justify-between gap-3">
                   <Link
@@ -230,17 +241,24 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                   >
                     {refundRequest.courseTitle}
                   </Link>
-                  <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                    Pending Refund Request
-                  </span>
+                  <RefundRequestBadge status={refundRequest.status} />
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {formatPrice(refundRequest.amountPaid)} · purchased{" "}
+                  {formatPrice(
+                    refundRequest.amountRefunded ?? refundRequest.amountPaid
+                  )}{" "}
+                  · purchased{" "}
                   {new Date(refundRequest.purchasedAt).toLocaleDateString()} ·
-                  raised{" "}
-                  {new Date(refundRequest.requestedAt).toLocaleDateString()}
+                  {refundRequest.resolvedAt
+                    ? ` decided ${new Date(refundRequest.resolvedAt).toLocaleDateString()}`
+                    : ` raised ${new Date(refundRequest.requestedAt).toLocaleDateString()}`}
                 </p>
                 <p className="mt-2 text-sm">{refundRequest.reason}</p>
+                {refundRequest.decisionNote && (
+                  <p className="mt-2 border-l-2 pl-3 text-sm text-muted-foreground">
+                    From the Cadence team: {refundRequest.decisionNote}
+                  </p>
+                )}
               </div>
             ))}
           </CardContent>
@@ -248,6 +266,29 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
       )}
     </div>
   );
+}
+
+function RefundRequestBadge({ status }: { status: RefundStatus }) {
+  switch (status) {
+    case RefundStatus.Requested:
+      return (
+        <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+          Pending Refund Request
+        </span>
+      );
+    case RefundStatus.Approved:
+      return (
+        <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
+          Refunded
+        </span>
+      );
+    case RefundStatus.Declined:
+      return (
+        <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+          Declined
+        </span>
+      );
+  }
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

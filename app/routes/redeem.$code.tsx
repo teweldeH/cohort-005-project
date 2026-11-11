@@ -11,12 +11,20 @@ import { Button } from "~/components/ui/button";
 import { Ticket, AlertCircle, CheckCircle2, Globe } from "lucide-react";
 import { data } from "react-router";
 import { db } from "~/db";
-import { purchases, coupons, courses, enrollments } from "~/db/schema";
+import {
+  purchases,
+  coupons,
+  courses,
+  enrollments,
+  RefundStatus,
+} from "~/db/schema";
 import { eq, and } from "drizzle-orm";
-import { hasOpenRefundRequest } from "~/lib/refunds.server";
+import { getRefundRequestStatus } from "~/lib/refunds.server";
 
 const SEAT_ON_HOLD_MESSAGE =
   "This seat can't be claimed right now. Please ask the person who shared this link.";
+const SEAT_REFUNDED_MESSAGE =
+  "This seat is no longer available. Please ask the person who shared this link.";
 
 function getCourseById(id: number) {
   return db.select().from(courses).where(eq(courses.id, id)).get();
@@ -57,9 +65,13 @@ function redeemCoupon(
   }
 
   // A claimed Seat rules out a Refund, so no Seat is claimed while the Buyer
-  // is waiting on one.
-  if (hasOpenRefundRequest(coupon.purchaseId)) {
+  // is waiting on one, and a refunded purchase's Seats are gone for good.
+  const refundRequestStatus = getRefundRequestStatus(coupon.purchaseId);
+  if (refundRequestStatus === RefundStatus.Requested) {
     return { ok: false, error: SEAT_ON_HOLD_MESSAGE };
+  }
+  if (refundRequestStatus === RefundStatus.Approved) {
+    return { ok: false, error: SEAT_REFUNDED_MESSAGE };
   }
 
   const existingEnrollment = db
@@ -146,7 +158,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const alreadyRedeemed = coupon.redeemedByUserId !== null;
   const alreadyEnrolled = isUserEnrolled(currentUserId, coupon.courseId);
-  const onHold = !alreadyRedeemed && hasOpenRefundRequest(coupon.purchaseId);
+  const refundRequestStatus = alreadyRedeemed
+    ? null
+    : getRefundRequestStatus(coupon.purchaseId);
+  const onHold = refundRequestStatus === RefundStatus.Requested;
+  const refunded = refundRequestStatus === RefundStatus.Approved;
 
   // Check country mismatch upfront so we can show a clear message
   let countryMismatch = false;
@@ -168,6 +184,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     alreadyRedeemed,
     alreadyEnrolled,
     onHold,
+    refunded,
     countryMismatch,
   };
 }
@@ -212,6 +229,7 @@ export default function Redeem({
     alreadyRedeemed,
     alreadyEnrolled,
     onHold,
+    refunded,
     countryMismatch,
   } = loaderData;
   const fetcher = useFetcher();
@@ -227,7 +245,11 @@ export default function Redeem({
 
   // Determine which state to show
   const canRedeem =
-    !alreadyRedeemed && !alreadyEnrolled && !onHold && !countryMismatch;
+    !alreadyRedeemed &&
+    !alreadyEnrolled &&
+    !onHold &&
+    !refunded &&
+    !countryMismatch;
 
   return (
     <div className="mx-auto max-w-2xl p-6 lg:p-8">
@@ -278,6 +300,16 @@ export default function Redeem({
                   Go to Course
                 </Button>
               </Link>
+            </div>
+          ) : refunded ? (
+            <div className="rounded-lg bg-destructive/10 p-4">
+              <div className="flex items-center justify-center gap-2 text-destructive">
+                <AlertCircle className="size-5" />
+                <span className="font-medium">Seat no longer available</span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {SEAT_REFUNDED_MESSAGE}
+              </p>
             </div>
           ) : onHold ? (
             <div className="rounded-lg bg-amber-50 p-4 dark:bg-amber-900/20">
