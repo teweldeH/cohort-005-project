@@ -216,7 +216,7 @@ function CopyButton({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
-    const url = `${window.location.origin}/redeem/${code}`;
+    const url = `${window.location.origin}/claim/${code}`;
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -227,7 +227,7 @@ function CopyButton({ code }: { code: string }) {
     <button
       onClick={handleCopy}
       className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-      title="Copy redemption link"
+      title="Copy seat link"
     >
       {copied ? (
         <>
@@ -266,7 +266,7 @@ export default function Team({ loaderData }: Route.ComponentProps) {
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Team Management</h1>
         <p className="mt-1 text-muted-foreground">
-          Manage your team&apos;s course seats and coupon codes
+          Manage your team&apos;s course seats and seat links
         </p>
       </div>
 
@@ -356,10 +356,10 @@ export default function Team({ loaderData }: Route.ComponentProps) {
         </div>
       )}
 
-      {/* Coupon list */}
+      {/* Seat list */}
       <div>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Coupons</h2>
+          <h2 className="text-lg font-semibold">Seats</h2>
           {courseStats.length > 1 && (
             <select
               value={courseFilter}
@@ -381,7 +381,7 @@ export default function Team({ loaderData }: Route.ComponentProps) {
         </div>
 
         {filteredSeats.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No coupons yet.</p>
+          <p className="text-sm text-muted-foreground">No seats yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
