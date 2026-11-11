@@ -7,11 +7,11 @@ An online course platform where Buyers purchase courses and Students take them.
 ### Refunds
 
 **Refund Request**:
-A Buyer's ask to get their money back for a purchase, which is Requested until it is Approved or Declined.
+A Buyer's ask to get their money back for a purchase, which is Requested until an Admin Approves or Declines it. A Declined Refund Request is final: that purchase can't be asked about again.
 _Avoid_: Cancellation, Reversal, Chargeback, Refund (for a request not yet Approved)
 
 **Refund**:
-The full amount paid for a purchase, returned to its Buyer when a Refund Request is Approved, which also ends access to the course. A purchase is refunded whole or not at all.
+The full amount paid for a purchase, returned to its Buyer when a Refund Request is Approved, which also ends the access the purchase gave: the Buyer's own for an Own Purchase, every Seat for a Team Purchase. A purchase is refunded whole or not at all.
 _Avoid_: Reversal, Chargeback, Cancellation
 
 **Refund Eligibility**:
@@ -28,7 +28,7 @@ _Avoid_: Personal purchase, individual purchase
 A single purchase by a Buyer that covers several Seats for one course.
 
 **Seat**:
-One person's access to a course from a Team Purchase, either unclaimed or claimed.
+One person's access to a course from a Team Purchase, either unclaimed or claimed. The Seats of a refunded Team Purchase can never be claimed.
 _Avoid_: Coupon, licence
 
 ### People
@@ -36,6 +36,10 @@ _Avoid_: Coupon, licence
 **Buyer**:
 The person who paid for a purchase, who may never take the course themselves.
 _Avoid_: Customer, purchaser
+
+**Admin**:
+A member of Cadence staff who runs the platform, including deciding Refund Requests.
+_Avoid_: Team admin (for the Buyer of a Team Purchase), moderator, reviewer
 
 **Student**:
 A person who takes courses on the platform.
