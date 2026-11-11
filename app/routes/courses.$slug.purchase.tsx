@@ -37,6 +37,7 @@ import { formatDuration, formatPrice } from "~/lib/utils";
 import { resolveCountry } from "~/lib/country.server";
 import { calculatePppPrice, getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { parseFormData, parseParams } from "~/lib/validation";
+import { getTeamForBuyer } from "~/lib/teams.server";
 
 function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
@@ -187,18 +188,6 @@ function createPurchase(
     .values({ userId, courseId, amountPaid, country })
     .returning()
     .get();
-}
-
-function getTeamForBuyer(userId: number) {
-  const membership = db
-    .select()
-    .from(teamMembers)
-    .where(eq(teamMembers.userId, userId))
-    .get();
-
-  if (!membership) return undefined;
-
-  return db.select().from(teams).where(eq(teams.id, membership.teamId)).get();
 }
 
 function getOrCreateTeamForUser(userId: number) {

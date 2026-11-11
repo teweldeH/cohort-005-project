@@ -2237,7 +2237,8 @@ This course is still in draft while the cluster examples are rewritten against t
     .returning()
     .all();
 
-  db.insert(schema.purchases)
+  const [emmaCourse2Purchase] = db
+    .insert(schema.purchases)
     .values({
       userId: students[0].id, // Emma — bought course 2 individually
       courseId: course2.id,
@@ -2245,7 +2246,8 @@ This course is still in draft while the cluster examples are rewritten against t
       country: "US",
       createdAt: daysAgo(40),
     })
-    .run();
+    .returning()
+    .all();
 
   db.insert(schema.purchases)
     .values({
@@ -2267,7 +2269,8 @@ This course is still in draft while the cluster examples are rewritten against t
     })
     .run();
 
-  db.insert(schema.purchases)
+  const [sophiaPurchase] = db
+    .insert(schema.purchases)
     .values({
       userId: students[4].id, // Sophia — bought course 1 individually
       courseId: course1.id,
@@ -2275,7 +2278,8 @@ This course is still in draft while the cluster examples are rewritten against t
       country: "US",
       createdAt: daysAgo(15),
     })
-    .run();
+    .returning()
+    .all();
 
   console.log(`Created ${countRows(schema.purchases)} individual purchases.`);
 
@@ -2704,7 +2708,7 @@ This course is still in draft while the cluster examples are rewritten against t
   );
 
   // Four seats on Design Systems, bought during launch week, none claimed yet.
-  createTeamPurchase(
+  const novakTeam = createTeamPurchase(
     "marta.novak@student.dev",
     course3,
     4,
@@ -2712,6 +2716,62 @@ This course is still in draft while the cluster examples are rewritten against t
     4,
     []
   );
+
+  // ─── Refund Requests ───
+  // One in each status, so /admin/refunds and Settings have something to show.
+  // Requested: Sophia's Own Purchase, and Marta's Team Purchase, whose Seats
+  // are on hold until it is decided. Declined: Emma's course 2 purchase.
+  // Approved: an Own Purchase by Bossy whose Enrollment has already ended.
+
+  const [bossyRefundedPurchase] = db
+    .insert(schema.purchases)
+    .values({
+      userId: bossy.id,
+      courseId: course3.id,
+      amountPaid: course3.price,
+      country: "US",
+      createdAt: daysAgo(20),
+    })
+    .returning()
+    .all();
+
+  db.insert(schema.refundRequests)
+    .values([
+      {
+        purchaseId: sophiaPurchase.id,
+        reason:
+          "I thought this covered TypeScript generics in more depth. It's a good course, just not what I need.",
+        requestedAt: daysAgo(5),
+      },
+      {
+        purchaseId: novakTeam.purchase.id,
+        reason:
+          "Our design team was cut back this month, so we no longer need these seats.",
+        requestedAt: daysAgo(1),
+      },
+      {
+        purchaseId: emmaCourse2Purchase.id,
+        reason: "I haven't had time to finish it.",
+        requestedAt: daysAgo(35),
+        status: schema.RefundRequestStatus.Declined,
+        resolvedAt: daysAgo(34),
+        resolvedByUserId: admin.id,
+        decisionNote:
+          "You have worked through a good part of the course, so we can't refund it. Reply to this email if something in it isn't working for you.",
+      },
+      {
+        purchaseId: bossyRefundedPurchase.id,
+        reason: "I bought this for myself by mistake. I meant to buy seats.",
+        requestedAt: daysAgo(19),
+        status: schema.RefundRequestStatus.Approved,
+        amountRefunded: course3.price,
+        resolvedAt: daysAgo(18),
+        resolvedByUserId: admin.id,
+      },
+    ])
+    .run();
+
+  console.log(`Created ${countRows(schema.refundRequests)} Refund Requests.`);
 
   // ─── Flush watch events ───
   // Batched: the heartbeat makes these by far the largest table, and one

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useFetcher } from "react-router";
+import { Link, useFetcher } from "react-router";
 import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
@@ -77,5 +77,18 @@ export function RequestRefund({
         </div>
       </fetcher.Form>
     </div>
+  );
+}
+
+/** Where a Buyer sees that a Refund Request was Declined, and where to read why. */
+export function RefundRequestDeclined() {
+  return (
+    <p className="border-t pt-4 text-xs text-muted-foreground">
+      Your Refund Request was declined.{" "}
+      <Link to="/settings" className="underline">
+        See why in Settings
+      </Link>
+      .
+    </p>
   );
 }

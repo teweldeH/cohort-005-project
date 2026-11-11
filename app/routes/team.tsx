@@ -8,8 +8,6 @@ import { Users, BookOpen, Copy, Check, AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse } from "react-router";
 import { db } from "~/db";
 import {
-  teams,
-  teamMembers,
   seats,
   courses,
   purchases,
@@ -17,24 +15,16 @@ import {
   RefundRequestStatus,
 } from "~/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
-import { RequestRefund } from "~/components/request-refund";
+import {
+  RefundRequestDeclined,
+  RequestRefund,
+} from "~/components/request-refund";
 import {
   getRefundEligibility,
   getRefundRequestStatus,
 } from "~/lib/refunds.server";
 import { formatPrice } from "~/lib/utils";
-
-function getTeamForBuyer(userId: number) {
-  const membership = db
-    .select()
-    .from(teamMembers)
-    .where(eq(teamMembers.userId, userId))
-    .get();
-
-  if (!membership) return undefined;
-
-  return db.select().from(teams).where(eq(teams.id, membership.teamId)).get();
-}
+import { getTeamForBuyer } from "~/lib/teams.server";
 
 function getSeatsForTeam(teamId: number) {
   return db.select().from(seats).where(eq(seats.teamId, teamId)).all();
@@ -127,17 +117,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   >();
 
   for (const seat of allSeats) {
-    if (!courseMap.has(seat.courseId)) {
+    let entry = courseMap.get(seat.courseId);
+    if (!entry) {
       const course = getCourseById(seat.courseId);
-      courseMap.set(seat.courseId, {
+      entry = {
         courseId: seat.courseId,
         courseTitle: course?.title ?? "Unknown Course",
         courseSlug: course?.slug ?? "",
         total: 0,
         claimed: 0,
-      });
+      };
+      courseMap.set(seat.courseId, entry);
     }
-    const entry = courseMap.get(seat.courseId)!;
     entry.total++;
     if (seat.claimedByUserId !== null) {
       entry.claimed++;
@@ -156,7 +147,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Build Seat rows with claimer email
   const refundRequestStatuses = new Map(
-    [...new Set(allSeats.map((c) => c.purchaseId))].map((purchaseId) => [
+    [...new Set(allSeats.map((seat) => seat.purchaseId))].map((purchaseId) => [
       purchaseId,
       getRefundRequestStatus(purchaseId),
     ])
@@ -182,13 +173,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
 
   // The Team Purchases this Buyer paid for, each refunded whole or not at all.
-  const purchaseIds = [...new Set(allSeats.map((c) => c.purchaseId))];
+  const purchaseIds = [...new Set(allSeats.map((seat) => seat.purchaseId))];
   const teamPurchases: TeamPurchaseRow[] = getBuyerPurchases(
     currentUserId,
     purchaseIds
   )
     .map((purchase) => {
-      const purchaseSeats = allSeats.filter((c) => c.purchaseId === purchase.id);
+      const purchaseSeats = allSeats.filter((seat) => seat.purchaseId === purchase.id);
       const course = getCourseById(purchase.courseId);
       const eligibility = getRefundEligibility(
         purchase,
@@ -202,7 +193,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         purchasedAt: purchase.createdAt,
         amount: purchase.amountPaid,
         totalSeats: purchaseSeats.length,
-        claimedSeats: purchaseSeats.filter((c) => c.claimedByUserId !== null).length,
+        claimedSeats: purchaseSeats.filter((seat) => seat.claimedByUserId !== null).length,
         canRequestRefund: eligibility.eligible,
         refundRequestStatus: refundRequestStatuses.get(purchase.id) ?? null,
       };
@@ -251,7 +242,7 @@ export default function Team({ loaderData }: Route.ComponentProps) {
   const filteredSeats =
     courseFilter === "all"
       ? seatRows
-      : seatRows.filter((c) => c.courseId === courseFilter);
+      : seatRows.filter((seat) => seat.courseId === courseFilter);
 
   return (
     <div className="mx-auto max-w-7xl p-6 lg:p-8">
@@ -341,13 +332,7 @@ export default function Team({ loaderData }: Route.ComponentProps) {
                       Refunded. Its seats can no longer be claimed.
                     </p>
                   ) : purchase.refundRequestStatus === RefundRequestStatus.Declined ? (
-                    <p className="border-t pt-4 text-xs text-muted-foreground">
-                      Your Refund Request was declined.{" "}
-                      <Link to="/settings" className="underline">
-                        See why in Settings
-                      </Link>
-                      .
-                    </p>
+                    <RefundRequestDeclined />
                   ) : null}
                 </CardContent>
               </Card>

@@ -5,6 +5,7 @@ import { DevUI } from "~/components/dev-ui";
 import { Toaster } from "sonner";
 import { getCurrentUserId, getDevCountry } from "~/lib/session";
 import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
+import { getTeamForBuyer } from "~/lib/teams.server";
 import { eq, and, or, sql, desc } from "drizzle-orm";
 import { db } from "~/db";
 import {
@@ -13,8 +14,6 @@ import {
   modules,
   lessons,
   lessonProgress,
-  teams,
-  teamMembers,
   LessonProgressStatus,
 } from "~/db/schema";
 
@@ -24,22 +23,6 @@ function getAllUsers() {
 
 function getUserById(id: number) {
   return db.select().from(users).where(eq(users.id, id)).get();
-}
-
-function getTeamForBuyer(userId: number) {
-  const membership = db
-    .select()
-    .from(teamMembers)
-    .where(eq(teamMembers.userId, userId))
-    .get();
-
-  if (!membership) return undefined;
-
-  return db.select().from(teams).where(eq(teams.id, membership.teamId)).get();
-}
-
-function isTeamAdmin(userId: number) {
-  return !!getTeamForBuyer(userId);
 }
 
 function getCourseLessonIds(courseId: number): number[] {
@@ -206,7 +189,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     devCountry,
     countryTierInfo,
     countries: COUNTRIES,
-    isTeamAdmin: currentUserId ? isTeamAdmin(currentUserId) : false,
+    hasTeamPurchases: currentUserId ? !!getTeamForBuyer(currentUserId) : false,
   };
 }
 
@@ -218,7 +201,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     devCountry,
     countryTierInfo,
     countries,
-    isTeamAdmin: userIsTeamAdmin,
+    hasTeamPurchases,
   } = loaderData;
 
   return (
@@ -226,7 +209,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       <Sidebar
         currentUser={currentUser}
         recentCourses={recentCourses}
-        isTeamAdmin={userIsTeamAdmin}
+        hasTeamPurchases={hasTeamPurchases}
       />
       <main className="flex-1 overflow-y-auto">
         <Outlet />
