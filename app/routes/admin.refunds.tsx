@@ -22,13 +22,13 @@ import { Textarea } from "~/components/ui/textarea";
 import { AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse, Link } from "react-router";
 import { formatPrice } from "~/lib/utils";
-import { isTeamPurchase } from "~/lib/refunds";
+import { type RefundDecisionOutcome } from "~/lib/refunds";
 import {
   decideRefundRequest,
-  getBuyerLearning,
-  getSeatCounts,
+  getUsage,
   type RefundDecision,
 } from "~/lib/refunds.server";
+import { RefundRequestBadge } from "~/components/refund-request-badge";
 
 const RECENTLY_DECIDED_LIMIT = 20;
 
@@ -132,7 +132,7 @@ function buildRefundDecisionEmail(input: {
   courseTitle: string;
   purchasedAt: string;
   amount: number;
-  outcome: "approve" | "decline";
+  outcome: RefundDecisionOutcome;
   note: string | null;
 }) {
   const purchase = `your purchase of "${input.courseTitle}" on ${new Date(input.purchasedAt).toLocaleDateString()}`;
@@ -140,13 +140,13 @@ function buildRefundDecisionEmail(input: {
     input.outcome === "approve"
       ? [
           `We have approved your Refund Request for ${purchase}.`,
-          `Your Refund of ${formatPrice(input.amount)} is on its way, and the access this purchase gave has ended.`,
+          `Your Refund of ${formatPrice(input.amount)} is on its way, and what this purchase gave has ended.`,
         ]
       : [`We have declined your Refund Request for ${purchase}.`];
 
   return {
     to: input.buyerEmail,
-    subject: `Refund ${input.outcome === "approve" ? "approved" : "declined"} — ${input.courseTitle}`,
+    subject: `Refund Request ${input.outcome === "approve" ? "approved" : "declined"} — ${input.courseTitle}`,
     body: [
       `Hi ${input.buyerName},`,
       "",
@@ -172,22 +172,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     .where(eq(refundRequests.status, RefundRequestStatus.Requested))
     .orderBy(asc(refundRequests.requestedAt))
     .all()
-    .map((refundRequest) => {
-      const seatCounts = getSeatCounts(refundRequest.purchaseId);
-      return {
-        ...refundRequest,
-        isOwnPurchaseOfAdmin: refundRequest.buyerId === admin.id,
-        usage: isTeamPurchase(seatCounts)
-          ? { kind: "team" as const, ...seatCounts }
-          : {
-              kind: "own" as const,
-              ...getBuyerLearning(
-                refundRequest.buyerId,
-                refundRequest.courseId
-              ),
-            },
-      };
-    });
+    .map((refundRequest) => ({
+      ...refundRequest,
+      isOwnPurchaseOfAdmin: refundRequest.buyerId === admin.id,
+      usage: getUsage(
+        refundRequest.purchaseId,
+        refundRequest.buyerId,
+        refundRequest.courseId
+      ),
+    }));
 
   const recentlyDecided = selectRefundRequests()
     .where(ne(refundRequests.status, RefundRequestStatus.Requested))
@@ -270,10 +263,10 @@ function formatWatched(seconds: number) {
 type WaitingRequest = Route.ComponentProps["loaderData"]["waiting"][number];
 
 /** What ends if the Refund Request is Approved, in the Admin's words. */
-function accessThatEnds(refundRequest: WaitingRequest) {
+function whatApprovalEnds(refundRequest: WaitingRequest) {
   return refundRequest.usage.kind === "team"
     ? `Its ${refundRequest.usage.seats} Seats can never be claimed.`
-    : `${refundRequest.buyerName} loses access to ${refundRequest.courseTitle}. Their progress is kept.`;
+    : `${refundRequest.buyerName}'s Enrollment in ${refundRequest.courseTitle} ends. Their progress is kept.`;
 }
 
 function DecideRefundRequest({
@@ -282,7 +275,10 @@ function DecideRefundRequest({
   refundRequest: WaitingRequest;
 }) {
   const fetcher = useFetcher<typeof action>();
-  const [deciding, setDeciding] = useState<"approve" | "decline" | null>(null);
+  const [deciding, setDeciding] = useState<RefundDecisionOutcome | null>(
+    null
+  );
+  const [note, setNote] = useState("");
   const isSubmitting = fetcher.state !== "idle";
 
   useEffect(() => {
@@ -321,17 +317,20 @@ function DecideRefundRequest({
   }
 
   const approving = deciding === "approve";
+  // The action rejects a blank Decline note too, but only after the page is
+  // gone; catching it here keeps the Admin on the form.
+  const missingDeclineNote = !approving && note.trim() === "";
 
   return (
     <fetcher.Form method="post" className="space-y-2 rounded-md border p-3">
       <p className="text-sm font-medium">
         {approving
           ? `Refund ${formatPrice(refundRequest.amountPaid)} to ${refundRequest.buyerName}?`
-          : `Decline ${refundRequest.buyerName}'s Refund Request?`}
+          : `Decline ${refundRequest.buyerName}'s Refund Request for ${formatPrice(refundRequest.amountPaid)}?`}
       </p>
       <p className="text-xs text-muted-foreground">
         {approving
-          ? accessThatEnds(refundRequest)
+          ? whatApprovalEnds(refundRequest)
           : "They can't ask about this purchase again."}{" "}
         This can't be undone.
       </p>
@@ -342,18 +341,25 @@ function DecideRefundRequest({
         rows={2}
         required={!approving}
         maxLength={1000}
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
         placeholder={
           approving
             ? "A note to the Buyer (optional)"
             : "Tell the Buyer why (required)"
         }
       />
+      {missingDeclineNote && note.length > 0 && (
+        <p className="text-xs text-destructive">
+          Tell the Buyer why their request was declined.
+        </p>
+      )}
       <div className="flex gap-2">
         <Button
           type="submit"
           size="sm"
           variant={approving ? "default" : "destructive"}
-          disabled={isSubmitting}
+          disabled={isSubmitting || missingDeclineNote}
         >
           {isSubmitting
             ? "Saving..."
@@ -365,24 +371,15 @@ function DecideRefundRequest({
           type="button"
           size="sm"
           variant="ghost"
-          onClick={() => setDeciding(null)}
+          onClick={() => {
+            setDeciding(null);
+            setNote("");
+          }}
         >
           Back
         </Button>
       </div>
     </fetcher.Form>
-  );
-}
-
-function StatusBadge({ status }: { status: RefundRequestStatus }) {
-  return status === RefundRequestStatus.Approved ? (
-    <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
-      Approved
-    </span>
-  ) : (
-    <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-      Declined
-    </span>
   );
 }
 
@@ -459,7 +456,7 @@ export default function AdminRefunds({ loaderData }: Route.ComponentProps) {
                       by {refundRequest.decidedBy ?? "an Admin"}
                     </p>
                   </div>
-                  <StatusBadge status={refundRequest.status} />
+                  <RefundRequestBadge status={refundRequest.status} />
                 </div>
                 {refundRequest.decisionNote && (
                   <p className="mt-2 text-sm">{refundRequest.decisionNote}</p>

@@ -1,6 +1,4 @@
-import { Link, useFetcher, redirect } from "react-router";
-import { useEffect } from "react";
-import { toast } from "sonner";
+import { Link, useFetcher, redirect, isRouteErrorResponse } from "react-router";
 import { z } from "zod";
 import type { Route } from "./+types/claim.$code";
 import { getCurrentUserId } from "~/lib/session";
@@ -46,61 +44,41 @@ function isUserEnrolled(userId: number, courseId: number) {
   return !!existing;
 }
 
-type ClaimResult =
-  | { ok: true; enrollment: typeof enrollments.$inferSelect }
-  | { ok: false; error: string };
+function getPurchaseById(id: number) {
+  return db.select().from(purchases).where(eq(purchases.id, id)).get();
+}
 
-function claimSeat(
-  code: string,
-  userId: number,
-  userCountry: string
-): ClaimResult {
+/** Claims a Seat for a user, giving them an Enrollment, or throws why not. */
+function claimSeat(code: string, userId: number, userCountry: string) {
   const seat = getSeatByCode(code);
   if (!seat) {
-    return { ok: false, error: "Seat not found" };
+    throw data("Seat not found.", { status: 404 });
   }
 
   if (seat.claimedByUserId !== null) {
-    return { ok: false, error: "This seat has already been claimed" };
+    throw data("This seat has already been claimed.", { status: 409 });
   }
 
   // A claimed Seat rules out a Refund, so no Seat is claimed while the Buyer
   // is waiting on one, and a refunded purchase's Seats are gone for good.
   const refundRequestStatus = getRefundRequestStatus(seat.purchaseId);
   if (refundRequestStatus === RefundRequestStatus.Requested) {
-    return { ok: false, error: SEAT_ON_HOLD_MESSAGE };
+    throw data(SEAT_ON_HOLD_MESSAGE, { status: 409 });
   }
   if (refundRequestStatus === RefundRequestStatus.Approved) {
-    return { ok: false, error: SEAT_REFUNDED_MESSAGE };
+    throw data(SEAT_REFUNDED_MESSAGE, { status: 410 });
   }
 
-  const existingEnrollment = db
-    .select()
-    .from(enrollments)
-    .where(
-      and(
-        eq(enrollments.userId, userId),
-        eq(enrollments.courseId, seat.courseId)
-      )
-    )
-    .get();
-
-  if (existingEnrollment) {
-    return { ok: false, error: "You are already enrolled in this course" };
+  if (isUserEnrolled(userId, seat.courseId)) {
+    throw data("You are already enrolled in this course.", { status: 409 });
   }
 
-  const purchase = db
-    .select()
-    .from(purchases)
-    .where(eq(purchases.id, seat.purchaseId))
-    .get();
-
+  const purchase = getPurchaseById(seat.purchaseId);
   if (purchase?.country && purchase.country !== userCountry) {
-    return {
-      ok: false,
-      error:
-        "This seat can only be claimed from the same country as the buyer",
-    };
+    throw data(
+      "This seat can only be claimed from the same country as the buyer.",
+      { status: 403 }
+    );
   }
 
   db.update(seats)
@@ -111,13 +89,11 @@ function claimSeat(
     .where(eq(seats.id, seat.id))
     .run();
 
-  const enrollment = db
+  return db
     .insert(enrollments)
     .values({ userId, courseId: seat.courseId })
     .returning()
     .get();
-
-  return { ok: true, enrollment };
 }
 
 const claimParamsSchema = z.object({
@@ -168,11 +144,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   let countryMismatch = false;
   if (!alreadyClaimed && !alreadyEnrolled) {
     const userCountry = await resolveCountry(request);
-    const purchase = db
-      .select()
-      .from(purchases)
-      .where(eq(purchases.id, seat.purchaseId))
-      .get();
+    const purchase = getPurchaseById(seat.purchaseId);
     if (purchase?.country && purchase.country !== (userCountry ?? "")) {
       countryMismatch = true;
     }
@@ -205,13 +177,9 @@ export async function action({ params, request }: Route.ActionArgs) {
   }
 
   const userCountry = await resolveCountry(request);
-  const result = claimSeat(code, currentUserId, userCountry ?? "");
+  const enrollment = claimSeat(code, currentUserId, userCountry ?? "");
 
-  if (!result.ok) {
-    return data({ error: result.error }, { status: 400 });
-  }
-
-  const course = getCourseById(result.enrollment.courseId);
+  const course = getCourseById(enrollment.courseId);
   if (!course) {
     throw redirect("/courses");
   }
@@ -219,10 +187,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   throw redirect(`/courses/${course.slug}/welcome`);
 }
 
-export default function Claim({
-  loaderData,
-  actionData,
-}: Route.ComponentProps) {
+export default function Claim({ loaderData }: Route.ComponentProps) {
   const {
     course,
     code,
@@ -234,14 +199,6 @@ export default function Claim({
   } = loaderData;
   const fetcher = useFetcher();
   const isSubmitting = fetcher.state !== "idle";
-
-  useEffect(() => {
-    const error =
-      fetcher.data?.error ?? (actionData as { error?: string })?.error;
-    if (error) {
-      toast.error(error);
-    }
-  }, [fetcher.data, actionData]);
 
   // Determine which state to show
   const canClaim =
@@ -283,6 +240,16 @@ export default function Claim({
                 shared this link for a new seat.
               </p>
             </div>
+          ) : refunded ? (
+            <div className="rounded-lg bg-destructive/10 p-4">
+              <div className="flex items-center justify-center gap-2 text-destructive">
+                <AlertCircle className="size-5" />
+                <span className="font-medium">Seat no longer available</span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {SEAT_REFUNDED_MESSAGE}
+              </p>
+            </div>
           ) : alreadyEnrolled ? (
             <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
               <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
@@ -300,16 +267,6 @@ export default function Claim({
                   Go to Course
                 </Button>
               </Link>
-            </div>
-          ) : refunded ? (
-            <div className="rounded-lg bg-destructive/10 p-4">
-              <div className="flex items-center justify-center gap-2 text-destructive">
-                <AlertCircle className="size-5" />
-                <span className="font-medium">Seat no longer available</span>
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {SEAT_REFUNDED_MESSAGE}
-              </p>
             </div>
           ) : onHold ? (
             <div className="rounded-lg bg-amber-50 p-4 dark:bg-amber-900/20">
@@ -356,6 +313,33 @@ export default function Claim({
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const message =
+    isRouteErrorResponse(error) && typeof error.data === "string"
+      ? error.data
+      : "This seat couldn't be claimed.";
+
+  return (
+    <div className="mx-auto max-w-2xl p-6 lg:p-8">
+      <h1 className="mb-2 text-2xl font-bold">Claim a Seat</h1>
+      <div className="mt-8 rounded-lg bg-destructive/10 p-4">
+        <div className="flex items-center justify-center gap-2 text-destructive">
+          <AlertCircle className="size-5" />
+          <span className="font-medium">{message}</span>
+        </div>
+      </div>
+      <div className="mt-6 text-center">
+        <Link
+          to="/courses"
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          Browse courses
+        </Link>
+      </div>
     </div>
   );
 }

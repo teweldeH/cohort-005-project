@@ -41,7 +41,10 @@ import {
 } from "lucide-react";
 import { CourseImage } from "~/components/course-image";
 import { UserAvatar } from "~/components/user-avatar";
-import { RequestRefund } from "~/components/request-refund";
+import {
+  RefundRequestDeclined,
+  RequestRefund,
+} from "~/components/request-refund";
 import { data, isRouteErrorResponse } from "react-router";
 import { findOwnPurchase } from "~/lib/refunds";
 import { getRefundEligibility } from "~/lib/refunds.server";
@@ -830,13 +833,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
                     <RequestRefund slug={course.slug} offer={refundOffer} />
                   )}
                   {refundOffer?.kind === "declined" && (
-                    <p className="border-t pt-4 text-xs text-muted-foreground">
-                      Your Refund Request was declined.{" "}
-                      <Link to="/settings" className="underline">
-                        See why in Settings
-                      </Link>
-                      .
-                    </p>
+                    <RefundRequestDeclined />
                   )}
                 </>
               ) : (

@@ -1,8 +1,9 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, notExists, sql } from "drizzle-orm";
 import { db } from "~/db";
 import {
   seats,
   enrollments,
+  purchases,
   lessonProgress,
   LessonProgressStatus,
   lessons,
@@ -11,7 +12,11 @@ import {
   RefundRequestStatus,
   videoWatchEvents,
 } from "~/db/schema";
-import { checkRefundEligibility, isTeamPurchase } from "~/lib/refunds";
+import {
+  checkRefundEligibility,
+  isTeamPurchase,
+  type RefundDecisionOutcome,
+} from "~/lib/refunds";
 
 /** How many Seats a purchase covers, and how many of them are claimed. */
 export function getSeatCounts(purchaseId: number) {
@@ -107,7 +112,8 @@ export function getRefundEligibility(
   );
 }
 
-function getUsage(purchaseId: number, buyerId: number, courseId: number) {
+/** How much of a purchase has been used, as Refund Eligibility measures it. */
+export function getUsage(purchaseId: number, buyerId: number, courseId: number) {
   const seatCounts = getSeatCounts(purchaseId);
 
   if (isTeamPurchase(seatCounts)) {
@@ -118,7 +124,7 @@ function getUsage(purchaseId: number, buyerId: number, courseId: number) {
 }
 
 /** How much of a course its Buyer has taken, as Refund Eligibility measures it. */
-export function getBuyerLearning(buyerId: number, courseId: number) {
+function getBuyerLearning(buyerId: number, courseId: number) {
   const lessonIds = getLessonIdsForCourse(courseId);
 
   return {
@@ -128,15 +134,71 @@ export function getBuyerLearning(buyerId: number, courseId: number) {
   };
 }
 
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Whether the Buyer's Enrollment in a course comes from somewhere other than
+ * this purchase: another Own Purchase not refunded, or a Seat they claimed.
+ */
+function isEnrollmentGivenElsewhere(
+  tx: Transaction,
+  purchase: { id: number; userId: number; courseId: number }
+) {
+  const claimedSeat = tx
+    .select({ id: seats.id })
+    .from(seats)
+    .where(
+      and(
+        eq(seats.claimedByUserId, purchase.userId),
+        eq(seats.courseId, purchase.courseId)
+      )
+    )
+    .get();
+
+  if (claimedSeat) return true;
+
+  const otherOwnPurchase = tx
+    .select({ id: purchases.id })
+    .from(purchases)
+    .where(
+      and(
+        eq(purchases.userId, purchase.userId),
+        eq(purchases.courseId, purchase.courseId),
+        ne(purchases.id, purchase.id),
+        notExists(
+          tx
+            .select({ id: seats.id })
+            .from(seats)
+            .where(eq(seats.purchaseId, purchases.id))
+        ),
+        notExists(
+          tx
+            .select({ id: refundRequests.id })
+            .from(refundRequests)
+            .where(
+              and(
+                eq(refundRequests.purchaseId, purchases.id),
+                eq(refundRequests.status, RefundRequestStatus.Approved)
+              )
+            )
+        )
+      )
+    )
+    .get();
+
+  return !!otherOwnPurchase;
+}
+
 export type RefundDecision =
-  | { outcome: "approve"; note: string | null }
-  | { outcome: "decline"; note: string };
+  | { outcome: Extract<RefundDecisionOutcome, "approve">; note: string | null }
+  | { outcome: Extract<RefundDecisionOutcome, "decline">; note: string };
 
 /**
  * An Admin's decision on a Requested Refund Request. Approving records the
- * Refund and ends the access the purchase gave: the Buyer's enrolment for an
- * Own Purchase. A Team Purchase's Seats end with the Approval itself, since a
- * Seat can't be claimed once its purchase is refunded.
+ * Refund and ends what the purchase gave: the Buyer's Enrollment for an Own
+ * Purchase, unless another Own Purchase or a claimed Seat still gives it. A
+ * Team Purchase's Seats end with the Approval itself, since a Seat can't be
+ * claimed once its purchase is refunded.
  *
  * Returns false if the Refund Request was no longer Requested, for instance
  * because another Admin decided it first.
@@ -175,7 +237,11 @@ export function decideRefundRequest(
 
     if (!decided) return false;
 
-    if (approved && !isTeamPurchase(getSeatCounts(purchase.id))) {
+    if (
+      approved &&
+      !isTeamPurchase(getSeatCounts(purchase.id)) &&
+      !isEnrollmentGivenElsewhere(tx, purchase)
+    ) {
       tx.delete(enrollments)
         .where(
           and(

@@ -27,6 +27,9 @@ export function findOwnPurchase<T extends PurchaseWithSeats>(
     );
 }
 
+/** What an Admin can do with a Requested Refund Request. */
+export type RefundDecisionOutcome = "approve" | "decline";
+
 export const REFUND_WINDOW_DAYS = 14;
 export const REFUND_WATCH_LIMIT_SECONDS = 2 * 60 * 60;
 export const REFUND_COMPLETION_LIMIT = 0.5;
