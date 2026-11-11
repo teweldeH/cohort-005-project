@@ -1,4 +1,4 @@
-import { RefundStatus } from "~/db/schema";
+import { RefundRequestStatus } from "~/db/schema";
 
 export type PurchaseWithSeats = {
   id: number;
@@ -41,7 +41,7 @@ export type RefundEligibilityFacts = {
   amountPaid: number;
   // A purchase has at most one Refund Request: a new one can't be raised
   // while it is open, and once decided the decision stands.
-  refundRequestStatus: RefundStatus | null;
+  refundRequestStatus: RefundRequestStatus | null;
   usage:
     | {
         kind: "own";
@@ -84,11 +84,11 @@ export function checkRefundEligibility(
 ): RefundEligibility {
   if (facts.amountPaid <= 0) return { eligible: false, reason: "free" };
   switch (facts.refundRequestStatus) {
-    case RefundStatus.Requested:
+    case RefundRequestStatus.Requested:
       return { eligible: false, reason: "request-open" };
-    case RefundStatus.Approved:
+    case RefundRequestStatus.Approved:
       return { eligible: false, reason: "refunded" };
-    case RefundStatus.Declined:
+    case RefundRequestStatus.Declined:
       return { eligible: false, reason: "declined" };
   }
 

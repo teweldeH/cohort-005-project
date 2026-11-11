@@ -1,14 +1,14 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "~/db";
 import {
-  coupons,
+  seats,
   enrollments,
   lessonProgress,
   LessonProgressStatus,
   lessons,
   modules,
-  refunds,
-  RefundStatus,
+  refundRequests,
+  RefundRequestStatus,
   videoWatchEvents,
 } from "~/db/schema";
 import { checkRefundEligibility, isTeamPurchase } from "~/lib/refunds";
@@ -18,10 +18,10 @@ export function getSeatCounts(purchaseId: number) {
   const result = db
     .select({
       seats: sql<number>`count(*)`,
-      claimedSeats: sql<number>`count(${coupons.redeemedByUserId})`,
+      claimedSeats: sql<number>`count(${seats.claimedByUserId})`,
     })
-    .from(coupons)
-    .where(eq(coupons.purchaseId, purchaseId))
+    .from(seats)
+    .where(eq(seats.purchaseId, purchaseId))
     .get();
 
   return { seats: result?.seats ?? 0, claimedSeats: result?.claimedSeats ?? 0 };
@@ -30,10 +30,10 @@ export function getSeatCounts(purchaseId: number) {
 /** The status of a purchase's Refund Request, or null if it has none. */
 export function getRefundRequestStatus(purchaseId: number) {
   const request = db
-    .select({ status: refunds.status })
-    .from(refunds)
-    .where(eq(refunds.purchaseId, purchaseId))
-    .orderBy(desc(refunds.id))
+    .select({ status: refundRequests.status })
+    .from(refundRequests)
+    .where(eq(refundRequests.purchaseId, purchaseId))
+    .orderBy(desc(refundRequests.id))
     .get();
 
   return request?.status ?? null;
@@ -156,9 +156,9 @@ export function decideRefundRequest(
 
   return db.transaction((tx) => {
     const decided = tx
-      .update(refunds)
+      .update(refundRequests)
       .set({
-        status: approved ? RefundStatus.Approved : RefundStatus.Declined,
+        status: approved ? RefundRequestStatus.Approved : RefundRequestStatus.Declined,
         amountRefunded: approved ? purchase.amountPaid : null,
         decisionNote: decision.note,
         resolvedAt: new Date().toISOString(),
@@ -166,11 +166,11 @@ export function decideRefundRequest(
       })
       .where(
         and(
-          eq(refunds.id, refundRequestId),
-          eq(refunds.status, RefundStatus.Requested)
+          eq(refundRequests.id, refundRequestId),
+          eq(refundRequests.status, RefundRequestStatus.Requested)
         )
       )
-      .returning({ id: refunds.id })
+      .returning({ id: refundRequests.id })
       .get();
 
     if (!decided) return false;

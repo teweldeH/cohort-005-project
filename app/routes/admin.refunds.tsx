@@ -8,9 +8,9 @@ import { parseFormData } from "~/lib/validation";
 import {
   courses,
   purchases,
-  refunds,
+  refundRequests,
   users,
-  RefundStatus,
+  RefundRequestStatus,
   UserRole,
 } from "~/db/schema";
 import { db } from "~/db";
@@ -79,13 +79,13 @@ const deciders = alias(users, "decider");
 function selectRefundRequests() {
   return db
     .select({
-      id: refunds.id,
-      status: refunds.status,
-      reason: refunds.reason,
-      requestedAt: refunds.requestedAt,
-      amountRefunded: refunds.amountRefunded,
-      decisionNote: refunds.decisionNote,
-      resolvedAt: refunds.resolvedAt,
+      id: refundRequests.id,
+      status: refundRequests.status,
+      reason: refundRequests.reason,
+      requestedAt: refundRequests.requestedAt,
+      amountRefunded: refundRequests.amountRefunded,
+      decisionNote: refundRequests.decisionNote,
+      resolvedAt: refundRequests.resolvedAt,
       decidedBy: deciders.name,
       purchaseId: purchases.id,
       purchasedAt: purchases.createdAt,
@@ -97,27 +97,27 @@ function selectRefundRequests() {
       courseTitle: courses.title,
       courseSlug: courses.slug,
     })
-    .from(refunds)
-    .innerJoin(purchases, eq(refunds.purchaseId, purchases.id))
+    .from(refundRequests)
+    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
     .innerJoin(buyers, eq(purchases.userId, buyers.id))
     .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .leftJoin(deciders, eq(refunds.resolvedByUserId, deciders.id));
+    .leftJoin(deciders, eq(refundRequests.resolvedByUserId, deciders.id));
 }
 
 function getRefundRequestWithPurchase(id: number) {
   return db
     .select({
-      status: refunds.status,
+      status: refundRequests.status,
       purchase: purchases,
       courseTitle: courses.title,
       buyerName: users.name,
       buyerEmail: users.email,
     })
-    .from(refunds)
-    .innerJoin(purchases, eq(refunds.purchaseId, purchases.id))
+    .from(refundRequests)
+    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
     .innerJoin(courses, eq(purchases.courseId, courses.id))
     .innerJoin(users, eq(purchases.userId, users.id))
-    .where(eq(refunds.id, id))
+    .where(eq(refundRequests.id, id))
     .get();
 }
 
@@ -169,8 +169,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const admin = requireAdmin(await getCurrentUserId(request));
 
   const waiting = selectRefundRequests()
-    .where(eq(refunds.status, RefundStatus.Requested))
-    .orderBy(asc(refunds.requestedAt))
+    .where(eq(refundRequests.status, RefundRequestStatus.Requested))
+    .orderBy(asc(refundRequests.requestedAt))
     .all()
     .map((refundRequest) => {
       const seatCounts = getSeatCounts(refundRequest.purchaseId);
@@ -190,8 +190,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
 
   const recentlyDecided = selectRefundRequests()
-    .where(ne(refunds.status, RefundStatus.Requested))
-    .orderBy(desc(refunds.resolvedAt))
+    .where(ne(refundRequests.status, RefundRequestStatus.Requested))
+    .orderBy(desc(refundRequests.resolvedAt))
     .limit(RECENTLY_DECIDED_LIMIT)
     .all();
 
@@ -232,7 +232,7 @@ export async function action({ request }: Route.ActionArgs) {
       : { outcome: "decline", note };
 
   if (
-    refundRequest.status !== RefundStatus.Requested ||
+    refundRequest.status !== RefundRequestStatus.Requested ||
     !decideRefundRequest(
       refundRequestId,
       refundRequest.purchase,
@@ -374,8 +374,8 @@ function DecideRefundRequest({
   );
 }
 
-function StatusBadge({ status }: { status: RefundStatus }) {
-  return status === RefundStatus.Approved ? (
+function StatusBadge({ status }: { status: RefundRequestStatus }) {
+  return status === RefundRequestStatus.Approved ? (
     <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
       Approved
     </span>

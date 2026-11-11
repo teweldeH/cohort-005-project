@@ -13,10 +13,10 @@ import { data } from "react-router";
 import { db } from "~/db";
 import {
   purchases,
-  coupons,
+  seats,
   courses,
   enrollments,
-  RefundStatus,
+  RefundRequestStatus,
 } from "~/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getRefundRequestStatus } from "~/lib/refunds.server";
@@ -30,8 +30,8 @@ function getCourseById(id: number) {
   return db.select().from(courses).where(eq(courses.id, id)).get();
 }
 
-function getCouponByCode(code: string) {
-  return db.select().from(coupons).where(eq(coupons.code, code)).get();
+function getSeatByCode(code: string) {
+  return db.select().from(seats).where(eq(seats.code, code)).get();
 }
 
 function isUserEnrolled(userId: number, courseId: number) {
@@ -50,27 +50,27 @@ type RedeemResult =
   | { ok: true; enrollment: typeof enrollments.$inferSelect }
   | { ok: false; error: string };
 
-function redeemCoupon(
+function claimSeat(
   code: string,
   userId: number,
   userCountry: string
 ): RedeemResult {
-  const coupon = getCouponByCode(code);
-  if (!coupon) {
+  const seat = getSeatByCode(code);
+  if (!seat) {
     return { ok: false, error: "Coupon not found" };
   }
 
-  if (coupon.redeemedByUserId !== null) {
+  if (seat.claimedByUserId !== null) {
     return { ok: false, error: "Coupon has already been redeemed" };
   }
 
   // A claimed Seat rules out a Refund, so no Seat is claimed while the Buyer
   // is waiting on one, and a refunded purchase's Seats are gone for good.
-  const refundRequestStatus = getRefundRequestStatus(coupon.purchaseId);
-  if (refundRequestStatus === RefundStatus.Requested) {
+  const refundRequestStatus = getRefundRequestStatus(seat.purchaseId);
+  if (refundRequestStatus === RefundRequestStatus.Requested) {
     return { ok: false, error: SEAT_ON_HOLD_MESSAGE };
   }
-  if (refundRequestStatus === RefundStatus.Approved) {
+  if (refundRequestStatus === RefundRequestStatus.Approved) {
     return { ok: false, error: SEAT_REFUNDED_MESSAGE };
   }
 
@@ -80,7 +80,7 @@ function redeemCoupon(
     .where(
       and(
         eq(enrollments.userId, userId),
-        eq(enrollments.courseId, coupon.courseId)
+        eq(enrollments.courseId, seat.courseId)
       )
     )
     .get();
@@ -92,7 +92,7 @@ function redeemCoupon(
   const purchase = db
     .select()
     .from(purchases)
-    .where(eq(purchases.id, coupon.purchaseId))
+    .where(eq(purchases.id, seat.purchaseId))
     .get();
 
   if (purchase?.country && purchase.country !== userCountry) {
@@ -103,17 +103,17 @@ function redeemCoupon(
     };
   }
 
-  db.update(coupons)
+  db.update(seats)
     .set({
-      redeemedByUserId: userId,
-      redeemedAt: new Date().toISOString(),
+      claimedByUserId: userId,
+      claimedAt: new Date().toISOString(),
     })
-    .where(eq(coupons.id, coupon.id))
+    .where(eq(seats.id, seat.id))
     .run();
 
   const enrollment = db
     .insert(enrollments)
-    .values({ userId, courseId: coupon.courseId })
+    .values({ userId, courseId: seat.courseId })
     .returning()
     .get();
 
@@ -139,8 +139,8 @@ export function meta({ loaderData }: Route.MetaArgs) {
 export async function loader({ params, request }: Route.LoaderArgs) {
   const { code } = parseParams(params, redeemParamsSchema);
 
-  const coupon = getCouponByCode(code);
-  if (!coupon) {
+  const seat = getSeatByCode(code);
+  if (!seat) {
     throw data("Coupon not found.", { status: 404 });
   }
 
@@ -151,27 +151,27 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     );
   }
 
-  const course = getCourseById(coupon.courseId);
+  const course = getCourseById(seat.courseId);
   if (!course) {
     throw data("Course not found.", { status: 404 });
   }
 
-  const alreadyRedeemed = coupon.redeemedByUserId !== null;
-  const alreadyEnrolled = isUserEnrolled(currentUserId, coupon.courseId);
-  const refundRequestStatus = alreadyRedeemed
+  const alreadyClaimed = seat.claimedByUserId !== null;
+  const alreadyEnrolled = isUserEnrolled(currentUserId, seat.courseId);
+  const refundRequestStatus = alreadyClaimed
     ? null
-    : getRefundRequestStatus(coupon.purchaseId);
-  const onHold = refundRequestStatus === RefundStatus.Requested;
-  const refunded = refundRequestStatus === RefundStatus.Approved;
+    : getRefundRequestStatus(seat.purchaseId);
+  const onHold = refundRequestStatus === RefundRequestStatus.Requested;
+  const refunded = refundRequestStatus === RefundRequestStatus.Approved;
 
   // Check country mismatch upfront so we can show a clear message
   let countryMismatch = false;
-  if (!alreadyRedeemed && !alreadyEnrolled) {
+  if (!alreadyClaimed && !alreadyEnrolled) {
     const userCountry = await resolveCountry(request);
     const purchase = db
       .select()
       .from(purchases)
-      .where(eq(purchases.id, coupon.purchaseId))
+      .where(eq(purchases.id, seat.purchaseId))
       .get();
     if (purchase?.country && purchase.country !== (userCountry ?? "")) {
       countryMismatch = true;
@@ -181,7 +181,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   return {
     course: { id: course.id, title: course.title, slug: course.slug },
     code,
-    alreadyRedeemed,
+    alreadyClaimed,
     alreadyEnrolled,
     onHold,
     refunded,
@@ -205,7 +205,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   }
 
   const userCountry = await resolveCountry(request);
-  const result = redeemCoupon(code, currentUserId, userCountry ?? "");
+  const result = claimSeat(code, currentUserId, userCountry ?? "");
 
   if (!result.ok) {
     return data({ error: result.error }, { status: 400 });
@@ -226,7 +226,7 @@ export default function Redeem({
   const {
     course,
     code,
-    alreadyRedeemed,
+    alreadyClaimed,
     alreadyEnrolled,
     onHold,
     refunded,
@@ -245,7 +245,7 @@ export default function Redeem({
 
   // Determine which state to show
   const canRedeem =
-    !alreadyRedeemed &&
+    !alreadyClaimed &&
     !alreadyEnrolled &&
     !onHold &&
     !refunded &&
@@ -270,7 +270,7 @@ export default function Redeem({
             <code className="rounded bg-muted px-2 py-0.5">{code}</code>
           </p>
 
-          {alreadyRedeemed ? (
+          {alreadyClaimed ? (
             <div className="rounded-lg bg-destructive/10 p-4">
               <div className="flex items-center justify-center gap-2 text-destructive">
                 <AlertCircle className="size-5" />
@@ -280,7 +280,7 @@ export default function Redeem({
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
                 Someone has already claimed this seat. Please ask the person who
-                shared this link for a new coupon.
+                shared this link for a new seat.
               </p>
             </div>
           ) : alreadyEnrolled ? (

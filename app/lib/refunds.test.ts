@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { RefundStatus } from "~/db/schema";
+import { RefundRequestStatus } from "~/db/schema";
 import { checkRefundEligibility, findOwnPurchase } from "./refunds";
 
 describe("findOwnPurchase", () => {
@@ -113,7 +113,7 @@ describe("checkRefundEligibility", () => {
   it("refuses while a Refund Request is already open", () => {
     expect(
       checkRefundEligibility(
-        { ...facts, refundRequestStatus: RefundStatus.Requested },
+        { ...facts, refundRequestStatus: RefundRequestStatus.Requested },
         now
       )
     ).toEqual({ eligible: false, reason: "request-open" });
@@ -122,7 +122,7 @@ describe("checkRefundEligibility", () => {
   it("refuses a purchase that has already been refunded", () => {
     expect(
       checkRefundEligibility(
-        { ...facts, refundRequestStatus: RefundStatus.Approved },
+        { ...facts, refundRequestStatus: RefundRequestStatus.Approved },
         now
       )
     ).toEqual({ eligible: false, reason: "refunded" });
@@ -132,7 +132,7 @@ describe("checkRefundEligibility", () => {
     // Still inside the window and barely started, but the decision stands.
     expect(
       checkRefundEligibility(
-        { ...facts, refundRequestStatus: RefundStatus.Declined },
+        { ...facts, refundRequestStatus: RefundRequestStatus.Declined },
         now
       )
     ).toEqual({ eligible: false, reason: "declined" });

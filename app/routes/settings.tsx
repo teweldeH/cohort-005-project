@@ -12,11 +12,11 @@ import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import {
   UserRole,
-  RefundStatus,
+  RefundRequestStatus,
   users,
   courses,
   purchases,
-  refunds,
+  refundRequests,
 } from "~/db/schema";
 import { AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse, Link } from "react-router";
@@ -57,28 +57,28 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Open ones first, then decided ones newest first. A decision is told to
   // the Buyer here, since outcome emails only reach the server log for now.
-  const refundRequests = db
+  const buyerRefundRequests = db
     .select({
-      id: refunds.id,
-      status: refunds.status,
-      decisionNote: refunds.decisionNote,
-      amountRefunded: refunds.amountRefunded,
-      resolvedAt: refunds.resolvedAt,
+      id: refundRequests.id,
+      status: refundRequests.status,
+      decisionNote: refundRequests.decisionNote,
+      amountRefunded: refundRequests.amountRefunded,
+      resolvedAt: refundRequests.resolvedAt,
       courseTitle: courses.title,
       courseSlug: courses.slug,
       amountPaid: purchases.amountPaid,
       purchasedAt: purchases.createdAt,
-      reason: refunds.reason,
-      requestedAt: refunds.requestedAt,
+      reason: refundRequests.reason,
+      requestedAt: refundRequests.requestedAt,
     })
-    .from(refunds)
-    .innerJoin(purchases, eq(refunds.purchaseId, purchases.id))
+    .from(refundRequests)
+    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
     .innerJoin(courses, eq(purchases.courseId, courses.id))
     .where(eq(purchases.userId, currentUserId))
     .orderBy(
-      sql`${refunds.status} != ${RefundStatus.Requested}`,
-      desc(refunds.resolvedAt),
-      desc(refunds.requestedAt)
+      sql`${refundRequests.status} != ${RefundRequestStatus.Requested}`,
+      desc(refundRequests.resolvedAt),
+      desc(refundRequests.requestedAt)
     )
     .all();
 
@@ -90,7 +90,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       bio: currentUser.bio,
       role: currentUser.role,
     },
-    refundRequests,
+    refundRequests: buyerRefundRequests,
   };
 }
 
@@ -131,7 +131,7 @@ export async function action({ request }: Route.ActionArgs) {
 export default function Settings({ loaderData }: Route.ComponentProps) {
   const { user, refundRequests } = loaderData;
   const waitingCount = refundRequests.filter(
-    (refundRequest) => refundRequest.status === RefundStatus.Requested
+    (refundRequest) => refundRequest.status === RefundRequestStatus.Requested
   ).length;
   const fetcher = useFetcher();
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -268,21 +268,21 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
   );
 }
 
-function RefundRequestBadge({ status }: { status: RefundStatus }) {
+function RefundRequestBadge({ status }: { status: RefundRequestStatus }) {
   switch (status) {
-    case RefundStatus.Requested:
+    case RefundRequestStatus.Requested:
       return (
         <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
           Pending Refund Request
         </span>
       );
-    case RefundStatus.Approved:
+    case RefundRequestStatus.Approved:
       return (
         <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
           Refunded
         </span>
       );
-    case RefundStatus.Declined:
+    case RefundRequestStatus.Declined:
       return (
         <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
           Declined
