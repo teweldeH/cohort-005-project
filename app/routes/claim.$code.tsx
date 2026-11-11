@@ -2,7 +2,7 @@ import { Link, useFetcher, redirect } from "react-router";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import type { Route } from "./+types/redeem.$code";
+import type { Route } from "./+types/claim.$code";
 import { getCurrentUserId } from "~/lib/session";
 import { resolveCountry } from "~/lib/country.server";
 import { parseParams, parseFormData } from "~/lib/validation";
@@ -46,7 +46,7 @@ function isUserEnrolled(userId: number, courseId: number) {
   return !!existing;
 }
 
-type RedeemResult =
+type ClaimResult =
   | { ok: true; enrollment: typeof enrollments.$inferSelect }
   | { ok: false; error: string };
 
@@ -54,14 +54,14 @@ function claimSeat(
   code: string,
   userId: number,
   userCountry: string
-): RedeemResult {
+): ClaimResult {
   const seat = getSeatByCode(code);
   if (!seat) {
-    return { ok: false, error: "Coupon not found" };
+    return { ok: false, error: "Seat not found" };
   }
 
   if (seat.claimedByUserId !== null) {
-    return { ok: false, error: "Coupon has already been redeemed" };
+    return { ok: false, error: "This seat has already been claimed" };
   }
 
   // A claimed Seat rules out a Refund, so no Seat is claimed while the Buyer
@@ -99,7 +99,7 @@ function claimSeat(
     return {
       ok: false,
       error:
-        "This coupon can only be redeemed from the same country as the purchaser",
+        "This seat can only be claimed from the same country as the buyer",
     };
   }
 
@@ -120,34 +120,34 @@ function claimSeat(
   return { ok: true, enrollment };
 }
 
-const redeemParamsSchema = z.object({
+const claimParamsSchema = z.object({
   code: z.string().min(1),
 });
 
-const redeemActionSchema = z.object({
-  intent: z.literal("confirm-redeem"),
+const claimActionSchema = z.object({
+  intent: z.literal("confirm-claim"),
 });
 
 export function meta({ loaderData }: Route.MetaArgs) {
-  const title = loaderData?.course?.title ?? "Redeem Coupon";
+  const title = loaderData?.course?.title ?? "Claim a Seat";
   return [
-    { title: `Redeem: ${title} — Cadence` },
-    { name: "description", content: `Redeem your coupon for ${title}` },
+    { title: `Claim a Seat: ${title} — Cadence` },
+    { name: "description", content: `Claim your seat on ${title}` },
   ];
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const { code } = parseParams(params, redeemParamsSchema);
+  const { code } = parseParams(params, claimParamsSchema);
 
   const seat = getSeatByCode(code);
   if (!seat) {
-    throw data("Coupon not found.", { status: 404 });
+    throw data("Seat not found.", { status: 404 });
   }
 
   const currentUserId = await getCurrentUserId(request);
   if (!currentUserId) {
     throw redirect(
-      `/login?redirectTo=${encodeURIComponent(`/redeem/${code}`)}`
+      `/login?redirectTo=${encodeURIComponent(`/claim/${code}`)}`
     );
   }
 
@@ -190,7 +190,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 }
 
 export async function action({ params, request }: Route.ActionArgs) {
-  const { code } = parseParams(params, redeemParamsSchema);
+  const { code } = parseParams(params, claimParamsSchema);
 
   const currentUserId = await getCurrentUserId(request);
   if (!currentUserId) {
@@ -198,7 +198,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
-  const parsed = parseFormData(formData, redeemActionSchema);
+  const parsed = parseFormData(formData, claimActionSchema);
 
   if (!parsed.success) {
     throw data("Invalid action.", { status: 400 });
@@ -219,7 +219,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   throw redirect(`/courses/${course.slug}/welcome`);
 }
 
-export default function Redeem({
+export default function Claim({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
@@ -244,7 +244,7 @@ export default function Redeem({
   }, [fetcher.data, actionData]);
 
   // Determine which state to show
-  const canRedeem =
+  const canClaim =
     !alreadyClaimed &&
     !alreadyEnrolled &&
     !onHold &&
@@ -253,7 +253,7 @@ export default function Redeem({
 
   return (
     <div className="mx-auto max-w-2xl p-6 lg:p-8">
-      <h1 className="mb-2 text-2xl font-bold">Redeem Coupon</h1>
+      <h1 className="mb-2 text-2xl font-bold">Claim a Seat</h1>
       <p className="mb-8 text-muted-foreground">
         You&apos;ve been invited to enroll in a course.
       </p>
@@ -266,7 +266,7 @@ export default function Redeem({
 
           <h2 className="mb-2 text-xl font-semibold">{course.title}</h2>
           <p className="mb-6 text-sm text-muted-foreground">
-            Coupon code:{" "}
+            Seat code:{" "}
             <code className="rounded bg-muted px-2 py-0.5">{code}</code>
           </p>
 
@@ -275,7 +275,7 @@ export default function Redeem({
               <div className="flex items-center justify-center gap-2 text-destructive">
                 <AlertCircle className="size-5" />
                 <span className="font-medium">
-                  This coupon has already been used
+                  This seat has already been claimed
                 </span>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -292,8 +292,8 @@ export default function Redeem({
                 </span>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                You already have access to this course. The coupon has not been
-                used, so it can still be shared with someone else.
+                You&apos;re already enrolled in this course. The seat has not
+                been claimed, so it can still be shared with someone else.
               </p>
               <Link to={`/courses/${course.slug}`}>
                 <Button className="mt-4" size="lg">
@@ -328,14 +328,14 @@ export default function Redeem({
                 <span className="font-medium">Region restriction</span>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                This coupon can only be redeemed from the same country as the
-                person who purchased it. Your location doesn&apos;t match the
-                purchaser&apos;s country.
+                This seat can only be claimed from the same country as the
+                buyer. Your location doesn&apos;t match the buyer&apos;s
+                country.
               </p>
             </div>
           ) : (
             <fetcher.Form method="post">
-              <input type="hidden" name="intent" value="confirm-redeem" />
+              <input type="hidden" name="intent" value="confirm-claim" />
               <Button
                 size="lg"
                 className="w-full max-w-sm"
