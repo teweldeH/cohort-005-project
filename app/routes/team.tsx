@@ -12,10 +12,14 @@ import {
   teamMembers,
   coupons,
   courses,
+  purchases,
   users,
   TeamMemberRole,
 } from "~/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
+import { RequestRefund } from "~/components/request-refund";
+import { getRefundEligibility } from "~/lib/refunds.server";
+import { formatPrice } from "~/lib/utils";
 
 function getTeamForAdmin(userId: number) {
   const membership = db
@@ -46,12 +50,36 @@ function getUserById(id: number) {
   return db.select().from(users).where(eq(users.id, id)).get();
 }
 
+function getBuyerPurchases(buyerId: number, purchaseIds: number[]) {
+  if (purchaseIds.length === 0) return [];
+
+  return db
+    .select()
+    .from(purchases)
+    .where(
+      and(eq(purchases.userId, buyerId), inArray(purchases.id, purchaseIds))
+    )
+    .all();
+}
+
 interface CourseStats {
   courseId: number;
   courseTitle: string;
   courseSlug: string;
   totalSeats: number;
   claimedSeats: number;
+}
+
+interface TeamPurchaseRow {
+  purchaseId: number;
+  courseTitle: string;
+  courseSlug: string;
+  purchasedAt: string;
+  amount: number;
+  totalSeats: number;
+  claimedSeats: number;
+  canRequestRefund: boolean;
+  refundRequested: boolean;
 }
 
 interface CouponRow {
@@ -145,7 +173,36 @@ export async function loader({ request }: Route.LoaderArgs) {
     };
   });
 
-  return { courseStats, couponRows };
+  // The Team Purchases this Buyer paid for, each refunded whole or not at all.
+  const purchaseIds = [...new Set(allCoupons.map((c) => c.purchaseId))];
+  const teamPurchases: TeamPurchaseRow[] = getBuyerPurchases(
+    currentUserId,
+    purchaseIds
+  )
+    .map((purchase) => {
+      const seats = allCoupons.filter((c) => c.purchaseId === purchase.id);
+      const course = getCourseById(purchase.courseId);
+      const eligibility = getRefundEligibility(
+        purchase,
+        currentUserId,
+        purchase.courseId
+      );
+      return {
+        purchaseId: purchase.id,
+        courseTitle: course?.title ?? "Unknown Course",
+        courseSlug: course?.slug ?? "",
+        purchasedAt: purchase.createdAt,
+        amount: purchase.amountPaid,
+        totalSeats: seats.length,
+        claimedSeats: seats.filter((c) => c.redeemedByUserId !== null).length,
+        canRequestRefund: eligibility.eligible,
+        refundRequested:
+          !eligibility.eligible && eligibility.reason === "request-open",
+      };
+    })
+    .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt));
+
+  return { courseStats, teamPurchases, couponRows };
 }
 
 function CopyButton({ code }: { code: string }) {
@@ -181,7 +238,7 @@ function CopyButton({ code }: { code: string }) {
 }
 
 export default function Team({ loaderData }: Route.ComponentProps) {
-  const { courseStats, couponRows } = loaderData;
+  const { courseStats, teamPurchases, couponRows } = loaderData;
   const [courseFilter, setCourseFilter] = useState<number | "all">("all");
 
   const filteredCoupons =
@@ -240,6 +297,42 @@ export default function Team({ loaderData }: Route.ComponentProps) {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Team Purchases */}
+      {teamPurchases.length > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-4 text-lg font-semibold">Purchases</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {teamPurchases.map((purchase) => (
+              <Card key={purchase.purchaseId}>
+                <CardHeader className="pb-2">
+                  <h3 className="font-semibold truncate">
+                    {purchase.courseTitle}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(purchase.purchasedAt).toLocaleDateString()} ·{" "}
+                    {formatPrice(purchase.amount)} · {purchase.claimedSeats} /{" "}
+                    {purchase.totalSeats} seats claimed
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {purchase.canRequestRefund ? (
+                    <RequestRefund
+                      slug={purchase.courseSlug}
+                      offer={purchase}
+                    />
+                  ) : purchase.refundRequested ? (
+                    <p className="border-t pt-4 text-xs text-muted-foreground">
+                      Refund requested. Its seats can&apos;t be claimed until we
+                      have reviewed it.
+                    </p>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
 

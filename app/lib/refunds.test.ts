@@ -32,16 +32,23 @@ describe("findOwnPurchase", () => {
 describe("checkRefundEligibility", () => {
   // An Own Purchase bought on 1 November, in local time, that would be
   // refundable today if nothing else got in the way.
-  const facts = {
-    purchasedAt: new Date(2026, 10, 1, 23, 0).toISOString(),
-    amountPaid: 5000,
-    seats: 0,
-    hasOpenRefundRequest: false,
+  const learning = {
+    kind: "own" as const,
     lessonCount: 10,
     completedLessonCount: 0,
     secondsWatched: 0,
   };
+  const facts = {
+    purchasedAt: new Date(2026, 10, 1, 23, 0).toISOString(),
+    amountPaid: 5000,
+    hasOpenRefundRequest: false,
+    usage: learning,
+  };
   const now = new Date(2026, 10, 5, 12, 0);
+
+  function withLearning(change: Partial<typeof learning>) {
+    return { ...facts, usage: { ...learning, ...change } };
+  }
 
   it("lets the Buyer ask for a Refund within the rules", () => {
     expect(checkRefundEligibility(facts, now)).toEqual({
@@ -54,32 +61,34 @@ describe("checkRefundEligibility", () => {
     // 60% done with barely anything watched: completion alone decides.
     expect(
       checkRefundEligibility(
-        { ...facts, completedLessonCount: 6, secondsWatched: 60 },
+        withLearning({ completedLessonCount: 6, secondsWatched: 60 }),
         now
       )
     ).toEqual({ eligible: false, reason: "too-much-completed" });
     expect(
-      checkRefundEligibility({ ...facts, completedLessonCount: 5 }, now)
+      checkRefundEligibility(withLearning({ completedLessonCount: 5 }), now)
     ).toEqual({ eligible: false, reason: "too-much-completed" });
     expect(
-      checkRefundEligibility({ ...facts, completedLessonCount: 4 }, now)
+      checkRefundEligibility(withLearning({ completedLessonCount: 4 }), now)
         .eligible
     ).toBe(true);
   });
 
   it("ignores completion for a course with no lessons", () => {
     expect(
-      checkRefundEligibility({ ...facts, lessonCount: 0 }, now).eligible
+      checkRefundEligibility(withLearning({ lessonCount: 0 }), now).eligible
     ).toBe(true);
   });
 
   it("refuses once two hours have been watched", () => {
     expect(
-      checkRefundEligibility({ ...facts, secondsWatched: 2 * 60 * 60 }, now)
+      checkRefundEligibility(withLearning({ secondsWatched: 2 * 60 * 60 }), now)
     ).toEqual({ eligible: false, reason: "too-much-watched" });
     expect(
-      checkRefundEligibility({ ...facts, secondsWatched: 2 * 60 * 60 - 1 }, now)
-        .eligible
+      checkRefundEligibility(
+        withLearning({ secondsWatched: 2 * 60 * 60 - 1 }),
+        now
+      ).eligible
     ).toBe(true);
   });
 
@@ -100,16 +109,39 @@ describe("checkRefundEligibility", () => {
     });
   });
 
-  it("refuses a Team Purchase", () => {
-    expect(checkRefundEligibility({ ...facts, seats: 5 }, now)).toEqual({
-      eligible: false,
-      reason: "team-purchase",
-    });
-  });
-
   it("refuses while a Refund Request is already open", () => {
     expect(
       checkRefundEligibility({ ...facts, hasOpenRefundRequest: true }, now)
     ).toEqual({ eligible: false, reason: "request-open" });
+  });
+
+  describe("for a Team Purchase", () => {
+    function team(claimedSeats: number) {
+      return {
+        ...facts,
+        usage: { kind: "team" as const, seats: 5, claimedSeats },
+      };
+    }
+
+    it("lets the Buyer ask for a Refund while no Seat is claimed", () => {
+      expect(checkRefundEligibility(team(0), now)).toEqual({
+        eligible: true,
+        lastDayInWindow: "2026-11-15",
+      });
+    });
+
+    it("refuses once a single Seat is claimed", () => {
+      // Refunded whole or not at all, so one claimed Seat keeps all five.
+      expect(checkRefundEligibility(team(1), now)).toEqual({
+        eligible: false,
+        reason: "seat-claimed",
+      });
+    });
+
+    it("still keeps to the fourteen-day window", () => {
+      expect(
+        checkRefundEligibility(team(0), new Date(2026, 10, 16, 0, 0))
+      ).toEqual({ eligible: false, reason: "window-closed" });
+    });
   });
 });

@@ -10,19 +10,23 @@ import {
   RefundStatus,
   videoWatchEvents,
 } from "~/db/schema";
-import { checkRefundEligibility } from "~/lib/refunds";
+import { checkRefundEligibility, isTeamPurchase } from "~/lib/refunds";
 
-function getSeatCount(purchaseId: number) {
+/** How many Seats a purchase covers, and how many of them are claimed. */
+export function getSeatCounts(purchaseId: number) {
   const result = db
-    .select({ seats: sql<number>`count(*)` })
+    .select({
+      seats: sql<number>`count(*)`,
+      claimedSeats: sql<number>`count(${coupons.redeemedByUserId})`,
+    })
     .from(coupons)
     .where(eq(coupons.purchaseId, purchaseId))
     .get();
 
-  return result?.seats ?? 0;
+  return { seats: result?.seats ?? 0, claimedSeats: result?.claimedSeats ?? 0 };
 }
 
-function hasOpenRefundRequest(purchaseId: number) {
+export function hasOpenRefundRequest(purchaseId: number) {
   const request = db
     .select({ id: refunds.id })
     .from(refunds)
@@ -94,18 +98,30 @@ export function getRefundEligibility(
   buyerId: number,
   courseId: number
 ) {
-  const lessonIds = getLessonIdsForCourse(courseId);
-
   return checkRefundEligibility(
     {
       purchasedAt: purchase.createdAt,
       amountPaid: purchase.amountPaid,
-      seats: getSeatCount(purchase.id),
       hasOpenRefundRequest: hasOpenRefundRequest(purchase.id),
-      lessonCount: lessonIds.length,
-      completedLessonCount: getCompletedLessonCount(buyerId, lessonIds),
-      secondsWatched: getSecondsWatched(buyerId, lessonIds),
+      usage: getUsage(purchase.id, buyerId, courseId),
     },
     new Date()
   );
+}
+
+function getUsage(purchaseId: number, buyerId: number, courseId: number) {
+  const seatCounts = getSeatCounts(purchaseId);
+
+  if (isTeamPurchase(seatCounts)) {
+    return { kind: "team" as const, ...seatCounts };
+  }
+
+  const lessonIds = getLessonIdsForCourse(courseId);
+
+  return {
+    kind: "own" as const,
+    lessonCount: lessonIds.length,
+    completedLessonCount: getCompletedLessonCount(buyerId, lessonIds),
+    secondsWatched: getSecondsWatched(buyerId, lessonIds),
+  };
 }

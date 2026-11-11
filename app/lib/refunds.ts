@@ -29,24 +29,32 @@ export const REFUND_WINDOW_DAYS = 14;
 export const REFUND_WATCH_LIMIT_SECONDS = 2 * 60 * 60;
 export const REFUND_COMPLETION_LIMIT = 0.5;
 
-/** What is known about a purchase and its Buyer when checking Refund Eligibility. */
+/**
+ * What is known about a purchase when checking Refund Eligibility. How much
+ * of it has been used depends on what was bought: an Own Purchase is used by
+ * its Buyer's learning, a Team Purchase by its Seats being claimed.
+ */
 export type RefundEligibilityFacts = {
   purchasedAt: string;
   amountPaid: number;
-  seats: number;
   hasOpenRefundRequest: boolean;
-  lessonCount: number;
-  completedLessonCount: number;
-  secondsWatched: number;
+  usage:
+    | {
+        kind: "own";
+        lessonCount: number;
+        completedLessonCount: number;
+        secondsWatched: number;
+      }
+    | { kind: "team"; seats: number; claimedSeats: number };
 };
 
 export type RefundIneligibleReason =
-  | "team-purchase"
   | "free"
   | "request-open"
   | "window-closed"
   | "too-much-completed"
-  | "too-much-watched";
+  | "too-much-watched"
+  | "seat-claimed";
 
 export type RefundEligibility =
   | { eligible: true; lastDayInWindow: string }
@@ -68,9 +76,6 @@ export function checkRefundEligibility(
   facts: RefundEligibilityFacts,
   now: Date
 ): RefundEligibility {
-  // Team Purchases get their own way in (#6).
-  if (isTeamPurchase(facts))
-    return { eligible: false, reason: "team-purchase" };
   if (facts.amountPaid <= 0) return { eligible: false, reason: "free" };
   if (facts.hasOpenRefundRequest) {
     return { eligible: false, reason: "request-open" };
@@ -86,14 +91,26 @@ export function checkRefundEligibility(
     return { eligible: false, reason: "window-closed" };
   }
 
+  const { usage } = facts;
+
+  if (usage.kind === "team") {
+    // A purchase is refunded whole or not at all, so one claimed Seat rules
+    // out the Refund. Nobody learns from an unclaimed Seat, so the Buyer's
+    // own learning doesn't count here.
+    if (usage.claimedSeats > 0) {
+      return { eligible: false, reason: "seat-claimed" };
+    }
+    return { eligible: true, lastDayInWindow };
+  }
+
   if (
-    facts.lessonCount > 0 &&
-    facts.completedLessonCount / facts.lessonCount >= REFUND_COMPLETION_LIMIT
+    usage.lessonCount > 0 &&
+    usage.completedLessonCount / usage.lessonCount >= REFUND_COMPLETION_LIMIT
   ) {
     return { eligible: false, reason: "too-much-completed" };
   }
 
-  if (facts.secondsWatched >= REFUND_WATCH_LIMIT_SECONDS) {
+  if (usage.secondsWatched >= REFUND_WATCH_LIMIT_SECONDS) {
     return { eligible: false, reason: "too-much-watched" };
   }
 
