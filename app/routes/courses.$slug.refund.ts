@@ -3,24 +3,40 @@ import { z } from "zod";
 import type { Route } from "./+types/courses.$slug.refund";
 import { getCurrentUserId } from "~/lib/session";
 import { db } from "~/db";
-import {
-  courses,
-  coupons,
-  lessons,
-  modules,
-  purchases,
-  refunds,
-  users,
-  videoWatchEvents,
-  RefundStatus,
-} from "~/db/schema";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { courses, purchases, refunds, users, RefundStatus } from "~/db/schema";
+import { and, eq } from "drizzle-orm";
 import { parseFormData, parseParams } from "~/lib/validation";
 import { formatPrice } from "~/lib/utils";
-import { isTeamPurchase } from "~/lib/refunds";
+import { REFUND_WINDOW_DAYS, type RefundIneligibleReason } from "~/lib/refunds";
+import { getRefundEligibility } from "~/lib/refunds.server";
 
-const REFUND_WINDOW_DAYS = 14;
-const MAX_WATCHED_HOURS = 2;
+const INELIGIBLE_RESPONSES: Record<
+  RefundIneligibleReason,
+  { message: string; status: number }
+> = {
+  // Team Purchases get their own way in (#6).
+  "team-purchase": {
+    message: "A Team Purchase can't be refunded here.",
+    status: 403,
+  },
+  free: { message: "A free purchase has nothing to refund.", status: 403 },
+  "request-open": {
+    message: "You already have a request open on this purchase.",
+    status: 409,
+  },
+  "window-closed": {
+    message: `The ${REFUND_WINDOW_DAYS}-day window has closed.`,
+    status: 403,
+  },
+  "too-much-completed": {
+    message: "You have completed too much of this course to request a refund.",
+    status: 403,
+  },
+  "too-much-watched": {
+    message: "You have watched too much of this course to request a refund.",
+    status: 403,
+  },
+};
 
 const refundParamsSchema = z.object({
   slug: z.string().min(1),
@@ -60,44 +76,6 @@ function getBuyerPurchase(
       )
     )
     .get();
-}
-
-function getLessonIdsForCourse(courseId: number): number[] {
-  const rows = db
-    .select({ id: lessons.id })
-    .from(lessons)
-    .innerJoin(modules, eq(lessons.moduleId, modules.id))
-    .where(eq(modules.courseId, courseId))
-    .all();
-
-  return rows.map((row) => row.id);
-}
-
-function getOpenRefundRequest(purchaseId: number) {
-  return db
-    .select()
-    .from(refunds)
-    .where(
-      and(
-        eq(refunds.purchaseId, purchaseId),
-        eq(refunds.status, RefundStatus.Requested)
-      )
-    )
-    .get();
-}
-
-// The fourteen-day window is counted in whole days, not hours — someone who
-// buys at 23:00 should still get the whole of their fourteenth day.
-function calendarDay(when: Date): string {
-  const month = String(when.getMonth() + 1).padStart(2, "0");
-  const day = String(when.getDate()).padStart(2, "0");
-  return `${when.getFullYear()}-${month}-${day}`;
-}
-
-function lastDayOfWindow(purchasedAtIso: string): string {
-  const deadline = new Date(purchasedAtIso);
-  deadline.setDate(deadline.getDate() + REFUND_WINDOW_DAYS);
-  return calendarDay(deadline);
 }
 
 /**
@@ -170,61 +148,11 @@ export async function action({ params, request }: Route.ActionArgs) {
     });
   }
 
-  if (getOpenRefundRequest(purchase.id)) {
-    throw data("You already have a request open on this purchase.", {
-      status: 409,
-    });
-  }
+  const eligibility = getRefundEligibility(purchase, currentUserId, course.id);
 
-  // Only an Own Purchase can be refunded here, matching what the course page
-  // offers. Team Purchases get their own way in (#6).
-  const seatCount = db
-    .select({ seats: sql<number>`count(*)` })
-    .from(coupons)
-    .where(eq(coupons.purchaseId, purchase.id))
-    .get();
-
-  if (isTeamPurchase({ seats: seatCount?.seats ?? 0 })) {
-    throw data("A Team Purchase can't be refunded here.", { status: 403 });
-  }
-
-  const today = calendarDay(new Date());
-  const withinRefundWindow = today <= lastDayOfWindow(purchase.createdAt);
-
-  if (!withinRefundWindow) {
-    throw data(`The ${REFUND_WINDOW_DAYS}-day window has closed.`, {
-      status: 403,
-    });
-  }
-
-  const courseLessonIds = getLessonIdsForCourse(course.id);
-
-  let watchedSeconds = 0;
-  if (courseLessonIds.length > 0) {
-    const furthestPerLesson = db
-      .select({
-        furthest: sql<number>`max(${videoWatchEvents.positionSeconds})`,
-      })
-      .from(videoWatchEvents)
-      .where(
-        and(
-          eq(videoWatchEvents.userId, currentUserId),
-          inArray(videoWatchEvents.lessonId, courseLessonIds)
-        )
-      )
-      .groupBy(videoWatchEvents.lessonId)
-      .all();
-
-    watchedSeconds = furthestPerLesson.reduce(
-      (total, row) => total + row.furthest,
-      0
-    );
-  }
-
-  if (watchedSeconds >= MAX_WATCHED_HOURS * 60 * 60) {
-    throw data("You have watched too much of this course to request a refund.", {
-      status: 403,
-    });
+  if (!eligibility.eligible) {
+    const { message, status } = INELIGIBLE_RESPONSES[eligibility.reason];
+    throw data(message, { status });
   }
 
   const parsed = parseFormData(formData, refundActionSchema);
