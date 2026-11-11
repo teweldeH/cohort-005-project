@@ -11,7 +11,7 @@ A Buyer's ask to get their money back for a purchase, which is Requested until a
 _Avoid_: Cancellation, Reversal, Chargeback, Refund (for a request not yet Approved)
 
 **Refund**:
-The full amount paid for a purchase, returned to its Buyer when a Refund Request is Approved, which also ends the access the purchase gave: the Buyer's own for an Own Purchase, every Seat for a Team Purchase. A purchase is refunded whole or not at all.
+The full amount paid for a purchase, returned to its Buyer when a Refund Request is Approved, which also ends what the purchase gave: the Buyer's Enrollment for an Own Purchase, every Seat for a Team Purchase. A purchase is refunded whole or not at all.
 _Avoid_: Reversal, Chargeback, Cancellation
 
 **Refund Eligibility**:
@@ -19,6 +19,10 @@ The single set of conditions a purchase must meet for its Buyer to raise a Refun
 _Avoid_: Cancellation offer, cancel window
 
 ### Purchases
+
+**Purchase**:
+A Buyer's payment for one course, either an Own Purchase or a Team Purchase.
+_Avoid_: Order, transaction
 
 **Own Purchase**:
 A Buyer's purchase of a course for themselves, which covers no Seats.
@@ -28,8 +32,12 @@ _Avoid_: Personal purchase, individual purchase
 A single purchase by a Buyer that covers several Seats for one course.
 
 **Seat**:
-One person's access to a course from a Team Purchase, either unclaimed or claimed. The Seats of a refunded Team Purchase can never be claimed.
-_Avoid_: Coupon, licence
+One person's place on a course from a Team Purchase, either unclaimed or claimed; claiming a Seat gives that person an Enrollment. The Seats of a refunded Team Purchase can never be claimed.
+_Avoid_: Coupon, licence, Redeem (for claim)
+
+**Enrollment**:
+A Student's access to one course, gained through an Own Purchase or a claimed Seat.
+_Avoid_: Access (as a noun), registration
 
 ### People
 
@@ -44,3 +52,7 @@ _Avoid_: Team admin (for the Buyer of a Team Purchase), moderator, reviewer
 **Student**:
 A person who takes courses on the platform.
 _Avoid_: Learner
+
+**Instructor**:
+A person who creates and publishes courses on Cadence.
+_Avoid_: Teacher, author
