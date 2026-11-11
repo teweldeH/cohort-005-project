@@ -15,10 +15,14 @@ import {
   purchases,
   users,
   TeamMemberRole,
+  RefundStatus,
 } from "~/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { RequestRefund } from "~/components/request-refund";
-import { getRefundEligibility } from "~/lib/refunds.server";
+import {
+  getRefundEligibility,
+  getRefundRequestStatus,
+} from "~/lib/refunds.server";
 import { formatPrice } from "~/lib/utils";
 
 function getTeamForAdmin(userId: number) {
@@ -79,7 +83,7 @@ interface TeamPurchaseRow {
   totalSeats: number;
   claimedSeats: number;
   canRequestRefund: boolean;
-  refundRequested: boolean;
+  refundRequestStatus: RefundStatus | null;
 }
 
 interface CouponRow {
@@ -88,6 +92,7 @@ interface CouponRow {
   courseId: number;
   courseTitle: string;
   redeemedByEmail: string | null;
+  refunded: boolean;
   createdAt: string;
 }
 
@@ -156,6 +161,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   );
 
   // Build coupon rows with redeemer email
+  const refundRequestStatuses = new Map(
+    [...new Set(allCoupons.map((c) => c.purchaseId))].map((purchaseId) => [
+      purchaseId,
+      getRefundRequestStatus(purchaseId),
+    ])
+  );
+
   const couponRows: CouponRow[] = allCoupons.map((coupon) => {
     let redeemedByEmail: string | null = null;
     if (coupon.redeemedByUserId !== null) {
@@ -169,6 +181,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       courseId: coupon.courseId,
       courseTitle: course?.title ?? "Unknown Course",
       redeemedByEmail,
+      refunded:
+        refundRequestStatuses.get(coupon.purchaseId) === RefundStatus.Approved,
       createdAt: coupon.createdAt,
     };
   });
@@ -196,8 +210,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         totalSeats: seats.length,
         claimedSeats: seats.filter((c) => c.redeemedByUserId !== null).length,
         canRequestRefund: eligibility.eligible,
-        refundRequested:
-          !eligibility.eligible && eligibility.reason === "request-open",
+        refundRequestStatus: refundRequestStatuses.get(purchase.id) ?? null,
       };
     })
     .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt));
@@ -323,10 +336,23 @@ export default function Team({ loaderData }: Route.ComponentProps) {
                       slug={purchase.courseSlug}
                       offer={purchase}
                     />
-                  ) : purchase.refundRequested ? (
+                  ) : purchase.refundRequestStatus ===
+                    RefundStatus.Requested ? (
                     <p className="border-t pt-4 text-xs text-muted-foreground">
                       Refund requested. Its seats can&apos;t be claimed until we
                       have reviewed it.
+                    </p>
+                  ) : purchase.refundRequestStatus === RefundStatus.Approved ? (
+                    <p className="border-t pt-4 text-xs text-muted-foreground">
+                      Refunded. Its seats can no longer be claimed.
+                    </p>
+                  ) : purchase.refundRequestStatus === RefundStatus.Declined ? (
+                    <p className="border-t pt-4 text-xs text-muted-foreground">
+                      Your Refund Request was declined.{" "}
+                      <Link to="/settings" className="underline">
+                        See why in Settings
+                      </Link>
+                      .
                     </p>
                   ) : null}
                 </CardContent>
@@ -389,6 +415,10 @@ export default function Team({ loaderData }: Route.ComponentProps) {
                         <span className="text-muted-foreground">
                           Claimed by {coupon.redeemedByEmail}
                         </span>
+                      ) : coupon.refunded ? (
+                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                          Refunded
+                        </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
                           Unclaimed
@@ -396,7 +426,7 @@ export default function Team({ loaderData }: Route.ComponentProps) {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {!coupon.redeemedByEmail && (
+                      {!coupon.redeemedByEmail && !coupon.refunded && (
                         <CopyButton code={coupon.code} />
                       )}
                     </td>

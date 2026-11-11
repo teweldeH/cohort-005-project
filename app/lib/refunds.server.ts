@@ -1,7 +1,8 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "~/db";
 import {
   coupons,
+  enrollments,
   lessonProgress,
   LessonProgressStatus,
   lessons,
@@ -26,19 +27,16 @@ export function getSeatCounts(purchaseId: number) {
   return { seats: result?.seats ?? 0, claimedSeats: result?.claimedSeats ?? 0 };
 }
 
-export function hasOpenRefundRequest(purchaseId: number) {
+/** The status of a purchase's Refund Request, or null if it has none. */
+export function getRefundRequestStatus(purchaseId: number) {
   const request = db
-    .select({ id: refunds.id })
+    .select({ status: refunds.status })
     .from(refunds)
-    .where(
-      and(
-        eq(refunds.purchaseId, purchaseId),
-        eq(refunds.status, RefundStatus.Requested)
-      )
-    )
+    .where(eq(refunds.purchaseId, purchaseId))
+    .orderBy(desc(refunds.id))
     .get();
 
-  return !!request;
+  return request?.status ?? null;
 }
 
 function getLessonIdsForCourse(courseId: number): number[] {
@@ -102,7 +100,7 @@ export function getRefundEligibility(
     {
       purchasedAt: purchase.createdAt,
       amountPaid: purchase.amountPaid,
-      hasOpenRefundRequest: hasOpenRefundRequest(purchase.id),
+      refundRequestStatus: getRefundRequestStatus(purchase.id),
       usage: getUsage(purchase.id, buyerId, courseId),
     },
     new Date()
@@ -116,12 +114,78 @@ function getUsage(purchaseId: number, buyerId: number, courseId: number) {
     return { kind: "team" as const, ...seatCounts };
   }
 
+  return { kind: "own" as const, ...getBuyerLearning(buyerId, courseId) };
+}
+
+/** How much of a course its Buyer has taken, as Refund Eligibility measures it. */
+export function getBuyerLearning(buyerId: number, courseId: number) {
   const lessonIds = getLessonIdsForCourse(courseId);
 
   return {
-    kind: "own" as const,
     lessonCount: lessonIds.length,
     completedLessonCount: getCompletedLessonCount(buyerId, lessonIds),
     secondsWatched: getSecondsWatched(buyerId, lessonIds),
   };
+}
+
+export type RefundDecision =
+  | { outcome: "approve"; note: string | null }
+  | { outcome: "decline"; note: string };
+
+/**
+ * An Admin's decision on a Requested Refund Request. Approving records the
+ * Refund and ends the access the purchase gave: the Buyer's enrolment for an
+ * Own Purchase. A Team Purchase's Seats end with the Approval itself, since a
+ * Seat can't be claimed once its purchase is refunded.
+ *
+ * Returns false if the Refund Request was no longer Requested, for instance
+ * because another Admin decided it first.
+ */
+export function decideRefundRequest(
+  refundRequestId: number,
+  purchase: {
+    id: number;
+    userId: number;
+    courseId: number;
+    amountPaid: number;
+  },
+  decision: RefundDecision,
+  adminId: number
+) {
+  const approved = decision.outcome === "approve";
+
+  return db.transaction((tx) => {
+    const decided = tx
+      .update(refunds)
+      .set({
+        status: approved ? RefundStatus.Approved : RefundStatus.Declined,
+        amountRefunded: approved ? purchase.amountPaid : null,
+        decisionNote: decision.note,
+        resolvedAt: new Date().toISOString(),
+        resolvedByUserId: adminId,
+      })
+      .where(
+        and(
+          eq(refunds.id, refundRequestId),
+          eq(refunds.status, RefundStatus.Requested)
+        )
+      )
+      .returning({ id: refunds.id })
+      .get();
+
+    if (!decided) return false;
+
+    if (approved && !isTeamPurchase(getSeatCounts(purchase.id))) {
+      tx.delete(enrollments)
+        .where(
+          and(
+            eq(enrollments.userId, purchase.userId),
+            eq(enrollments.courseId, purchase.courseId)
+          )
+        )
+        .run();
+    }
+
+    return true;
+  });
 }

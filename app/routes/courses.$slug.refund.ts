@@ -23,6 +23,14 @@ const INELIGIBLE_RESPONSES: Record<
     message: "You already have a request open on this purchase.",
     status: 409,
   },
+  refunded: {
+    message: "This purchase has already been refunded.",
+    status: 409,
+  },
+  declined: {
+    message: "Your Refund Request for this purchase was declined.",
+    status: 403,
+  },
   "window-closed": {
     message: `The ${REFUND_WINDOW_DAYS}-day window has closed.`,
     status: 403,

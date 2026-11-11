@@ -390,9 +390,16 @@ function getRefundOffer(userId: number, courseId: number) {
   if (!purchase) return null;
 
   const eligibility = getRefundEligibility(purchase, userId, courseId);
-  if (!eligibility.eligible) return null;
+  if (!eligibility.eligible) {
+    // A Declined Refund Request is final, so say so rather than just
+    // dropping the offer.
+    return eligibility.reason === "declined"
+      ? { kind: "declined" as const }
+      : null;
+  }
 
   return {
+    kind: "offer" as const,
     purchaseId: purchase.id,
     purchasedAt: purchase.createdAt,
     amount: purchase.amountPaid,
@@ -819,8 +826,17 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
                     </Button>
                   </Link>
                   <RateCourse userRating={userRating} />
-                  {refundOffer && (
+                  {refundOffer?.kind === "offer" && (
                     <RequestRefund slug={course.slug} offer={refundOffer} />
+                  )}
+                  {refundOffer?.kind === "declined" && (
+                    <p className="border-t pt-4 text-xs text-muted-foreground">
+                      Your Refund Request was declined.{" "}
+                      <Link to="/settings" className="underline">
+                        See why in Settings
+                      </Link>
+                      .
+                    </p>
                   )}
                 </>
               ) : (

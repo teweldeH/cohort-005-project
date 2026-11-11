@@ -1,3 +1,5 @@
+import { RefundStatus } from "~/db/schema";
+
 export type PurchaseWithSeats = {
   id: number;
   createdAt: string;
@@ -37,7 +39,9 @@ export const REFUND_COMPLETION_LIMIT = 0.5;
 export type RefundEligibilityFacts = {
   purchasedAt: string;
   amountPaid: number;
-  hasOpenRefundRequest: boolean;
+  // A purchase has at most one Refund Request: a new one can't be raised
+  // while it is open, and once decided the decision stands.
+  refundRequestStatus: RefundStatus | null;
   usage:
     | {
         kind: "own";
@@ -51,6 +55,8 @@ export type RefundEligibilityFacts = {
 export type RefundIneligibleReason =
   | "free"
   | "request-open"
+  | "refunded"
+  | "declined"
   | "window-closed"
   | "too-much-completed"
   | "too-much-watched"
@@ -77,8 +83,13 @@ export function checkRefundEligibility(
   now: Date
 ): RefundEligibility {
   if (facts.amountPaid <= 0) return { eligible: false, reason: "free" };
-  if (facts.hasOpenRefundRequest) {
-    return { eligible: false, reason: "request-open" };
+  switch (facts.refundRequestStatus) {
+    case RefundStatus.Requested:
+      return { eligible: false, reason: "request-open" };
+    case RefundStatus.Approved:
+      return { eligible: false, reason: "refunded" };
+    case RefundStatus.Declined:
+      return { eligible: false, reason: "declined" };
   }
 
   const windowEnd = new Date(facts.purchasedAt);
