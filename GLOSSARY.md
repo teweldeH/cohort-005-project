@@ -56,3 +56,9 @@ _Avoid_: Learner
 **Instructor**:
 A person who creates and publishes courses on Cadence.
 _Avoid_: Teacher, author
+
+### Notifications
+
+**Notification**:
+A message to one person telling them that something which concerns them has happened, pointing them to where they can see or act on it. Each Notification has exactly one recipient.
+_Avoid_: Alert, Event (an event is the thing that happened, not the message about it)
