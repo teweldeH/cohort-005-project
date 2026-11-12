@@ -260,6 +260,13 @@ function formatWatched(seconds: number) {
     : `${minutes}m`;
 }
 
+/**
+ * Shared by every card's decision form and the page. A decided request is no
+ * longer Requested, so its card unmounts when the loader revalidates; the page
+ * outlives it and shows the toast.
+ */
+const DECIDE_FETCHER_KEY = "decide-refund-request";
+
 type WaitingRequest = Route.ComponentProps["loaderData"]["waiting"][number];
 
 /** What ends if the Refund Request is Approved, in the Admin's words. */
@@ -274,22 +281,15 @@ function DecideRefundRequest({
 }: {
   refundRequest: WaitingRequest;
 }) {
-  const fetcher = useFetcher<typeof action>();
+  const fetcher = useFetcher<typeof action>({ key: DECIDE_FETCHER_KEY });
   const [deciding, setDeciding] = useState<RefundDecisionOutcome | null>(
     null
   );
   const [note, setNote] = useState("");
-  const isSubmitting = fetcher.state !== "idle";
-
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.decided) {
-      toast.success(
-        fetcher.data.decided === "approve"
-          ? "Refund Request approved."
-          : "Refund Request declined."
-      );
-    }
-  }, [fetcher.state, fetcher.data]);
+  // Every card shares one fetcher, so only the card being decided shows it.
+  const isSubmitting =
+    fetcher.state !== "idle" &&
+    fetcher.formData?.get("refundRequestId") === String(refundRequest.id);
 
   if (refundRequest.isOwnPurchaseOfAdmin) {
     return (
@@ -385,6 +385,17 @@ function DecideRefundRequest({
 
 export default function AdminRefunds({ loaderData }: Route.ComponentProps) {
   const { waiting, recentlyDecided } = loaderData;
+  const fetcher = useFetcher<typeof action>({ key: DECIDE_FETCHER_KEY });
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.decided) {
+      toast.success(
+        fetcher.data.decided === "approve"
+          ? "Refund Request approved."
+          : "Refund Request declined."
+      );
+    }
+  }, [fetcher.state, fetcher.data]);
 
   return (
     <div className="mx-auto max-w-4xl p-6 lg:p-8">
