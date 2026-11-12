@@ -14,7 +14,6 @@ import {
   enrollments,
   purchases,
   teams,
-  teamMembers,
   seats,
   CourseStatus,
 } from "~/db/schema";
@@ -194,12 +193,7 @@ function getOrCreateTeamForUser(userId: number) {
   const existingTeam = getTeamForBuyer(userId);
   if (existingTeam) return existingTeam;
 
-  const team = db.insert(teams).values({}).returning().get();
-  db.insert(teamMembers)
-    .values({ teamId: team.id, userId })
-    .returning()
-    .get();
-  return team;
+  return db.insert(teams).values({}).returning().get();
 }
 
 function generateSeats(

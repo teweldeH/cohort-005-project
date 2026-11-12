@@ -59,13 +59,7 @@ describe("getTeamForBuyer", () => {
 
   it("does not treat someone who claimed a Seat as a Buyer", () => {
     const claimer = addStudent("claimer@example.com");
-    const team = buySeats(base.user.id, [claimer.id]);
-    // Databases seeded before team roles were dropped still list claimers
-    // as team members.
-    testDb
-      .insert(schema.teamMembers)
-      .values({ teamId: team.id, userId: claimer.id })
-      .run();
+    buySeats(base.user.id, [claimer.id]);
 
     expect(getTeamForBuyer(claimer.id)).toBeUndefined();
   });

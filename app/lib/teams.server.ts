@@ -4,7 +4,7 @@ import { purchases, seats, teams } from "~/db/schema";
 
 /**
  * The team a Buyer bought Seats for, found through their Team Purchases.
- * Claiming a Seat never makes someone a Buyer, whatever `team_members` says.
+ * Claiming a Seat never makes someone a Buyer.
  */
 export function getTeamForBuyer(userId: number) {
   return db
