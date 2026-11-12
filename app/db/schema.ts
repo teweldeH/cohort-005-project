@@ -258,19 +258,6 @@ export const teams = sqliteTable("teams", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
-export const teamMembers = sqliteTable("team_members", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  teamId: integer("team_id")
-    .notNull()
-    .references(() => teams.id),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id),
-  createdAt: text("created_at")
-    .notNull()
-    .$defaultFn(() => new Date().toISOString()),
-});
-
 export const seats = sqliteTable("seats", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   teamId: integer("team_id")

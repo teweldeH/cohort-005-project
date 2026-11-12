@@ -2283,7 +2283,7 @@ This course is still in draft while the cluster examples are rewritten against t
 
   console.log(`Created ${countRows(schema.purchases)} individual purchases.`);
 
-  // ─── Teams, Team Members, and Seats ───
+  // ─── Teams and Seats ───
   // Bossy McBossface bought 5 team seats for course 2; Olivia and Liam claimed Seats
 
   const [team1] = db
@@ -2291,14 +2291,6 @@ This course is still in draft while the cluster examples are rewritten against t
     .values({ createdAt: daysAgo(30) })
     .returning()
     .all();
-
-  db.insert(schema.teamMembers)
-    .values({
-      teamId: team1.id,
-      userId: bossy.id,
-      createdAt: daysAgo(30),
-    })
-    .run();
 
   // Team purchase by Bossy McBossface for course 2 (5 seats)
   const [teamPurchase] = db
@@ -2630,14 +2622,6 @@ This course is still in draft while the cluster examples are rewritten against t
       .values({ createdAt: daysAgo(purchasedDaysAgo) })
       .returning()
       .all();
-
-    db.insert(schema.teamMembers)
-      .values({
-        teamId: team.id,
-        userId: buyer.id,
-          createdAt: daysAgo(purchasedDaysAgo),
-      })
-      .run();
 
     const [purchase] = db
       .insert(schema.purchases)
