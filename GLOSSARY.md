@@ -81,3 +81,7 @@ The author of a top-level Comment, or anyone who has replied to it.
 **Notification**:
 A message to one person telling them that something which concerns them has happened, pointing them to where they can see or act on it. Each Notification has exactly one recipient.
 _Avoid_: Alert, Event (an event is the thing that happened, not the message about it)
+
+**Unread**:
+A Notification its recipient hasn't opened or marked read yet. The bell counts Unread Notifications, and a recipient can mark one Unread again.
+_Avoid_: Unseen, New
