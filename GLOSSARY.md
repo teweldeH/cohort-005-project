@@ -57,6 +57,25 @@ _Avoid_: Learner
 A person who creates and publishes courses on Cadence.
 _Avoid_: Teacher, author
 
+### Comments
+
+**Comment**:
+A post someone makes on a lesson. Staff for the course and Students who can view its content may comment.
+_Avoid_: Post, Message
+
+**Reply**:
+A Comment made on another Comment. Replies go one level deep: you can't reply to a Reply.
+
+**Question**:
+A top-level Comment by someone who isn't staff for that course (its Instructor or a Platform Admin).
+
+**Answered**:
+A Question that has at least one Reply from staff for the course.
+_Avoid_: Resolved, Closed
+
+**Thread Participant**:
+The author of a top-level Comment, or anyone who has replied to it.
+
 ### Notifications
 
 **Notification**:
