@@ -67,7 +67,7 @@ _Avoid_: Post, Message
 A Comment made on another Comment. Replies go one level deep: you can't reply to a Reply.
 
 **Question**:
-A top-level Comment by someone who isn't staff for that course (its Instructor or a Platform Admin).
+A top-level Comment by someone who isn't staff for that course (its Instructor or an Admin).
 
 **Answered**:
 A Question that has at least one Reply from staff for the course.
