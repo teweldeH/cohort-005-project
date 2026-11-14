@@ -22,8 +22,52 @@ import { AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse, Link } from "react-router";
 import { db } from "~/db";
 import { desc, eq, sql } from "drizzle-orm";
-import { formatPrice } from "~/lib/utils";
+import { cn, formatPrice } from "~/lib/utils";
 import { RefundRequestBadge } from "~/components/refund-request-badge";
+import { useMockEmailSwitch } from "~/components/notifications.mock";
+
+// MOCK (#45): the switch is client state only, it saves nothing.
+function NotificationsSection() {
+  const [emailEnabled, setEmailEnabled] = useMockEmailSwitch();
+  return (
+    <Card id="notifications" className="mt-8 max-w-md scroll-mt-6">
+      <CardHeader>
+        <h2 className="text-lg font-semibold">Notifications</h2>
+        <p className="text-sm text-muted-foreground">
+          The bell always shows your Notifications.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <Label htmlFor="email-notifications">Email me about Notifications</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              We email you about a Notification you haven't read after about 15 minutes.
+            </p>
+          </div>
+          <button
+            id="email-notifications"
+            type="button"
+            role="switch"
+            aria-checked={emailEnabled}
+            onClick={() => setEmailEnabled(!emailEnabled)}
+            className={cn(
+              "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+              emailEnabled ? "bg-primary" : "bg-input"
+            )}
+          >
+            <span
+              className={cn(
+                "absolute left-0.5 top-0.5 size-5 rounded-full bg-background shadow transition-transform",
+                emailEnabled && "translate-x-5"
+              )}
+            />
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 const settingsSchema = z.object({
   name: z.string().trim().min(1, "Name cannot be empty."),
@@ -219,6 +263,8 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
           </fetcher.Form>
         </CardContent>
       </Card>
+
+      {user.role !== UserRole.Admin && <NotificationsSection />}
 
       {refundRequests.length > 0 && (
         <Card className="mt-8 max-w-md">
