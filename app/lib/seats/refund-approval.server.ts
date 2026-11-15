@@ -9,7 +9,8 @@ import { reopenInvitedSeat } from "./reopen.server";
  * code, as on any withdraw, so the Invitation's link is no longer available.
  *
  * Refunds call this directly rather than through the Seat module's index,
- * which itself reads Refund Request status from the refunds module.
+ * which itself depends on the refunds module for the roster's Refund
+ * Eligibility.
  */
 export function withdrawInvitationsOnRefund(
   tx: Transaction,

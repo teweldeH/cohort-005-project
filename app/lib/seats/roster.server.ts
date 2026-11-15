@@ -95,11 +95,12 @@ function getTeamSeats(teamId: number) {
 
 type TeamSeat = ReturnType<typeof getTeamSeats>[number];
 
-function getBuyerPurchases(buyerId: number, purchaseIds: number[]) {
+/** The course of each of the Buyer's purchases among `purchaseIds`. */
+function getPurchaseCourses(buyerId: number, purchaseIds: number[]) {
   if (purchaseIds.length === 0) return [];
 
   return db
-    .select({ purchase: purchases, course: courses })
+    .select({ purchaseId: purchases.id, course: courses })
     .from(purchases)
     .innerJoin(courses, eq(purchases.courseId, courses.id))
     .where(
@@ -165,9 +166,9 @@ export function getTeamRoster(
     ...new Set(teamSeats.map(({ seat }) => seat.purchaseId)),
   ];
 
-  const rosterPurchases = getBuyerPurchases(buyerId, purchaseIds)
-    .flatMap(({ purchase: row, course }): RosterPurchase[] => {
-      const purchase = getPurchase({ id: row.id });
+  const rosterPurchases = getPurchaseCourses(buyerId, purchaseIds)
+    .flatMap(({ purchaseId, course }): RosterPurchase[] => {
+      const purchase = getPurchase({ id: purchaseId });
       if (!purchase) return [];
       const { standing, refundRequestStatus } = purchase;
       const purchaseSeats = teamSeats
