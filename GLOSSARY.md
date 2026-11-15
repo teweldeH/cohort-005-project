@@ -40,7 +40,7 @@ A Buyer's offer of one unclaimed Seat to a specific person, named by email, who 
 _Avoid_: Invite (as a noun), assignment
 
 **Release**:
-A Buyer taking back a claimed Seat, which ends its holder's Enrollment and leaves the Seat unclaimed. Giving a Seat to someone else is a Release followed by an Invitation.
+A Buyer taking back a claimed Seat, which ends its holder's Enrollment and leaves the Seat unclaimed. Allowed only while its holder is within the limits Refund Eligibility sets for an Own Purchase. Giving a Seat to someone else is a Release followed by an Invitation.
 _Avoid_: Revoke, unassign, Reassign (as its own act)
 
 **Team**:
