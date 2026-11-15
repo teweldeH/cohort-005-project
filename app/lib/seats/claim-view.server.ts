@@ -1,13 +1,13 @@
 import { eq } from "drizzle-orm";
 import { db } from "~/db";
 import { users } from "~/db/schema";
+import { isUserEnrolled } from "~/lib/enrollments.server";
 import { getStanding } from "~/lib/purchase.server";
 import { refuse, type SeatResult } from "./result";
 import {
   getSeatByCode,
   invitationFor,
   isCountryMismatch,
-  isUserEnrolled,
 } from "./queries.server";
 
 /** Who is looking at a claim page: the signed-in user and where they are. */

@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
-import { db } from "~/db";
-import { courses, enrollments, purchases, seats, users } from "~/db/schema";
+import { eq } from "drizzle-orm";
+import { db, type DbOrTransaction } from "~/db";
+import { courses, purchases, seats, users } from "~/db/schema";
 import { normaliseEmail } from "./email";
 
 /** A Seat by its code, with the course and Team Purchase it belongs to. */
@@ -27,18 +27,6 @@ export function getSeatWithBuyer(seatId: number) {
     .get();
 }
 
-export function isUserEnrolled(userId: number, courseId: number) {
-  const existing = db
-    .select({ id: enrollments.id })
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
-
-  return !!existing;
-}
-
 /**
  * Seats may only be claimed from the Buyer's country. A purchase with no
  * recorded country can be claimed from anywhere.
@@ -57,11 +45,12 @@ export function isCountryMismatch(
  */
 export function invitationFor(
   seat: { invitedEmail: string | null },
-  userId: number
+  userId: number,
+  tx: DbOrTransaction = db
 ): { forViewer: boolean } | null {
   if (seat.invitedEmail === null) return null;
 
-  const user = db
+  const user = tx
     .select({ email: users.email })
     .from(users)
     .where(eq(users.id, userId))

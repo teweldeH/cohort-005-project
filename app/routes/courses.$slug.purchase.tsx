@@ -14,7 +14,7 @@ import {
   enrollments,
   CourseStatus,
 } from "~/db/schema";
-import { eq, and, or, sql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import {
@@ -32,6 +32,7 @@ import { formatDuration, formatPrice } from "~/lib/utils";
 import { resolveCountry } from "~/lib/country.server";
 import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { parseFormData, parseParams } from "~/lib/validation";
+import { isUserEnrolled } from "~/lib/enrollments.server";
 import { buy, quote } from "~/lib/purchase.server";
 
 function getCourseBySlug(slug: string) {
@@ -111,16 +112,6 @@ function getLessonCountForCourse(courseId: number) {
     .get();
 
   return count?.count ?? 0;
-}
-
-function isUserEnrolled(userId: number, courseId: number) {
-  return !!db
-    .select({ id: enrollments.id })
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
 }
 
 function getEnrollmentCountForCourse(courseId: number) {

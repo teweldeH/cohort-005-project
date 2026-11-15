@@ -9,6 +9,7 @@ import {
   seats,
   teams,
 } from "~/db/schema";
+import { isUserEnrolled } from "~/lib/enrollments.server";
 import { calculatePppPrice } from "~/lib/ppp";
 import { refuse, type Result } from "~/lib/result";
 import { newSeatCode } from "~/lib/seats/codes.server";
@@ -89,7 +90,7 @@ export function buy({
   seats?: number;
 }): Result<{ purchase: Purchase }, BuyRefusal> {
   return db.transaction((tx) => {
-    if (seatCount === undefined && isEnrolled(tx, buyerId, course.id)) {
+    if (seatCount === undefined && isUserEnrolled(buyerId, course.id, tx)) {
       return refuse("already-enrolled");
     }
 
@@ -230,16 +231,6 @@ function standingFor(status: RefundRequestStatus | null): Standing {
   if (status === RefundRequestStatus.Requested) return "paused";
   if (status === RefundRequestStatus.Approved) return "refunded";
   return "active";
-}
-
-function isEnrolled(tx: DbOrTransaction, userId: number, courseId: number) {
-  return !!tx
-    .select({ id: enrollments.id })
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
 }
 
 /**

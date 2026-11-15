@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "~/db";
 import { purchases, seatReleases, seats, users } from "~/db/schema";
-import { isUserEnrolled } from "./queries.server";
+import { isUserEnrolled } from "~/lib/enrollments.server";
 
 /**
  * What the course page tells a Student about their Seat on that course. While
