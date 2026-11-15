@@ -2,17 +2,22 @@ import { useState } from "react";
 import { Link } from "react-router";
 import type { Route } from "./+types/team";
 import { getCurrentUserId } from "~/lib/session";
-import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { Users, BookOpen, Copy, Check, AlertTriangle } from "lucide-react";
+import { Copy, Check, AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse } from "react-router";
 import { RefundRequestStatus } from "~/db/schema";
 import {
   RefundRequestDeclined,
   RequestRefund,
 } from "~/components/request-refund";
-import { formatPrice } from "~/lib/utils";
-import { getTeamRoster } from "~/lib/seats/index.server";
+import { cn, formatPrice } from "~/lib/utils";
+import {
+  getTeamRoster,
+  type RosterBanner,
+  type RosterPurchase,
+  type RosterSeat,
+  type RosterSeatStatus,
+} from "~/lib/seats/index.server";
 
 export function meta() {
   return [
@@ -38,7 +43,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return result.roster;
 }
 
-function CopyButton({ code }: { code: string }) {
+function CopyLink({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
@@ -53,7 +58,7 @@ function CopyButton({ code }: { code: string }) {
     <button
       onClick={handleCopy}
       className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-      title="Copy seat link"
+      title="Copy this Seat's link"
     >
       {copied ? (
         <>
@@ -70,14 +75,174 @@ function CopyButton({ code }: { code: string }) {
   );
 }
 
-export default function Team({ loaderData }: Route.ComponentProps) {
-  const { courseStats, teamPurchases, seatRows } = loaderData;
-  const [courseFilter, setCourseFilter] = useState<number | "all">("all");
+/** The purchase-wide notice above a Team Purchase's Seats. */
+function PurchaseBanner({ banner }: { banner: RosterBanner }) {
+  if (banner === "refunded") {
+    return (
+      <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+        Refunded. This purchase&apos;s Seats can no longer be claimed.
+      </p>
+    );
+  }
+  if (banner === "paused") {
+    return (
+      <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+        Refund requested. No Seat can be claimed until we&apos;ve reviewed it.
+        If it&apos;s declined, they can be claimed again.
+      </p>
+    );
+  }
+  if (banner === "still-refundable") {
+    return (
+      <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+        You can still get a Refund for this purchase. Once anyone claims one of
+        its Seats, you can&apos;t, even if you later Release them.
+      </p>
+    );
+  }
+  return null;
+}
 
-  const filteredSeats =
-    courseFilter === "all"
-      ? seatRows
-      : seatRows.filter((seat) => seat.courseId === courseFilter);
+const STATUS_LABEL: Record<RosterSeatStatus, string> = {
+  claimed: "Claimed",
+  open: "Open",
+  refunded: "Refunded",
+};
+
+const STATUS_STYLE: Record<RosterSeatStatus, string> = {
+  claimed: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  open: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  refunded: "bg-muted text-muted-foreground",
+};
+
+function StatusChip({ status }: { status: RosterSeatStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        STATUS_STYLE[status]
+      )}
+    >
+      {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+/** Who holds the Seat, or its code while nobody does. */
+function SeatPerson({ seat }: { seat: RosterSeat }) {
+  if (seat.status === "claimed") {
+    return (
+      <>
+        <p className="font-medium">{seat.holder.name}</p>
+        <p className="text-xs text-muted-foreground">{seat.holder.email}</p>
+      </>
+    );
+  }
+  return (
+    <code className="rounded bg-muted px-2 py-0.5 text-xs">{seat.code}</code>
+  );
+}
+
+/**
+ * What the Buyer can do with one Seat. An open Seat's link can be shared
+ * unless a Refund Request has paused the purchase.
+ */
+function SeatActions({
+  seat,
+  banner,
+}: {
+  seat: RosterSeat;
+  banner: RosterBanner;
+}) {
+  if (seat.status === "open" && banner !== "paused") {
+    return <CopyLink code={seat.code} />;
+  }
+  return null;
+}
+
+/** Ways to get money back for a Team Purchase, or what became of asking. */
+function RefundControls({ purchase }: { purchase: RosterPurchase }) {
+  if (purchase.canRequestRefund) {
+    return <RequestRefund slug={purchase.course.slug} offer={purchase} />;
+  }
+  if (purchase.refundRequestStatus === RefundRequestStatus.Declined) {
+    return <RefundRequestDeclined />;
+  }
+  return null;
+}
+
+function PurchaseSection({ purchase }: { purchase: RosterPurchase }) {
+  return (
+    <section aria-labelledby={`purchase-${purchase.purchaseId}`}>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2
+            id={`purchase-${purchase.purchaseId}`}
+            className="text-lg font-semibold"
+          >
+            {purchase.course.title}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Bought {new Date(purchase.purchasedAt).toLocaleDateString()} ·{" "}
+            {formatPrice(purchase.amount)} · {purchase.claimedSeats} /{" "}
+            {purchase.totalSeats} Seats claimed
+          </p>
+        </div>
+        <Link to={`/courses/${purchase.course.slug}/purchase?mode=team`}>
+          <Button variant="outline" size="sm">
+            Buy more seats
+          </Button>
+        </Link>
+      </div>
+
+      {purchase.banner && (
+        <div className="mb-3">
+          <PurchaseBanner banner={purchase.banner} />
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/50 text-left">
+              <th className="px-4 py-2 font-medium">Person</th>
+              <th className="px-4 py-2 font-medium">Status</th>
+              <th className="px-4 py-2 font-medium">Progress</th>
+              <th className="px-4 py-2 font-medium">Last active</th>
+              <th className="px-4 py-2 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {purchase.seats.map((seat) => (
+              <tr key={seat.id} className="border-b last:border-0">
+                <td className="px-4 py-3">
+                  <SeatPerson seat={seat} />
+                </td>
+                <td className="px-4 py-3">
+                  <StatusChip status={seat.status} />
+                </td>
+                {/* Progress and last active arrive with #58. */}
+                <td className="px-4 py-3" />
+                <td className="px-4 py-3 text-muted-foreground" />
+                <td className="px-4 py-3">
+                  <SeatActions seat={seat} banner={purchase.banner} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-3 max-w-sm">
+        <RefundControls purchase={purchase} />
+      </div>
+    </section>
+  );
+}
+
+export default function Team({ loaderData }: Route.ComponentProps) {
+  const { purchases } = loaderData;
 
   return (
     <div className="mx-auto max-w-7xl p-6 lg:p-8">
@@ -92,165 +257,19 @@ export default function Team({ loaderData }: Route.ComponentProps) {
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Team Management</h1>
         <p className="mt-1 text-muted-foreground">
-          Manage your team&apos;s course seats and seat links
+          Every Seat your Team Purchases give you, and who holds it
         </p>
       </div>
 
-      {/* Per-course stats */}
-      {courseStats.length > 0 && (
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {courseStats.map((stat) => (
-            <Card key={stat.courseId}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="size-4 text-muted-foreground" />
-                  <h3 className="font-semibold truncate">{stat.courseTitle}</h3>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {stat.claimedSeats}
-                      <span className="text-base font-normal text-muted-foreground">
-                        {" "}
-                        / {stat.totalSeats}
-                      </span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      seats claimed
-                    </p>
-                  </div>
-                  <Link to={`/courses/${stat.courseSlug}/purchase?mode=team`}>
-                    <Button variant="outline" size="sm">
-                      Buy more seats
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
+      {purchases.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No Seats yet.</p>
+      ) : (
+        <div className="space-y-10">
+          {purchases.map((purchase) => (
+            <PurchaseSection key={purchase.purchaseId} purchase={purchase} />
           ))}
         </div>
       )}
-
-      {/* Team Purchases */}
-      {teamPurchases.length > 0 && (
-        <div className="mb-8">
-          <h2 className="mb-4 text-lg font-semibold">Purchases</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {teamPurchases.map((purchase) => (
-              <Card key={purchase.purchaseId}>
-                <CardHeader className="pb-2">
-                  <h3 className="font-semibold truncate">
-                    {purchase.courseTitle}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(purchase.purchasedAt).toLocaleDateString()} ·{" "}
-                    {formatPrice(purchase.amount)} · {purchase.claimedSeats} /{" "}
-                    {purchase.totalSeats} seats claimed
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  {purchase.canRequestRefund ? (
-                    <RequestRefund
-                      slug={purchase.courseSlug}
-                      offer={purchase}
-                    />
-                  ) : purchase.refundRequestStatus ===
-                    RefundRequestStatus.Requested ? (
-                    <p className="border-t pt-4 text-xs text-muted-foreground">
-                      Refund requested. Its seats can&apos;t be claimed until we
-                      have reviewed it.
-                    </p>
-                  ) : purchase.refundRequestStatus === RefundRequestStatus.Approved ? (
-                    <p className="border-t pt-4 text-xs text-muted-foreground">
-                      Refunded. Its seats can no longer be claimed.
-                    </p>
-                  ) : purchase.refundRequestStatus === RefundRequestStatus.Declined ? (
-                    <RefundRequestDeclined />
-                  ) : null}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Seat list */}
-      <div>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Seats</h2>
-          {courseStats.length > 1 && (
-            <select
-              value={courseFilter}
-              onChange={(e) =>
-                setCourseFilter(
-                  e.target.value === "all" ? "all" : Number(e.target.value)
-                )
-              }
-              className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-            >
-              <option value="all">All courses</option>
-              {courseStats.map((stat) => (
-                <option key={stat.courseId} value={stat.courseId}>
-                  {stat.courseTitle}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        {filteredSeats.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No seats yet.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-3 text-left font-medium">Code</th>
-                  <th className="px-4 py-3 text-left font-medium">Course</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-left font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSeats.map((seat) => (
-                  <tr key={seat.id} className="border-b last:border-0">
-                    <td className="px-4 py-3">
-                      <code className="rounded bg-muted px-2 py-0.5 text-xs">
-                        {seat.code}
-                      </code>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {seat.courseTitle}
-                    </td>
-                    <td className="px-4 py-3">
-                      {seat.claimedByEmail ? (
-                        <span className="text-muted-foreground">
-                          Claimed by {seat.claimedByEmail}
-                        </span>
-                      ) : seat.refunded ? (
-                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                          Refunded
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                          Unclaimed
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {!seat.claimedByEmail && !seat.refunded && (
-                        <CopyButton code={seat.code} />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

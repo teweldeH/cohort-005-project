@@ -14,7 +14,9 @@ export {
   getTeamRoster,
   type TeamRoster,
   type TeamRosterRefusal,
-  type CourseStats,
-  type TeamPurchaseRow,
-  type SeatRow,
+  type RosterPurchase,
+  type RosterBanner,
+  type RosterSeat,
+  type RosterSeatStatus,
+  type SeatHolder,
 } from "./roster.server";

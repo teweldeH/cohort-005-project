@@ -1,56 +1,57 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "~/db";
-import {
-  courses,
-  purchases,
-  seats,
-  users,
-  RefundRequestStatus,
-} from "~/db/schema";
+import { courses, purchases, seats, users, type RefundRequestStatus } from "~/db/schema";
 import {
   getRefundEligibility,
   getRefundRequestStatus,
 } from "~/lib/refunds.server";
 import { getTeamForBuyer } from "~/lib/teams.server";
+import { standingFor, type PurchaseStanding } from "./queries.server";
 import { refuse, type SeatResult } from "./result";
 
-/** Seats claimed out of bought, for one course on the Team. */
-export interface CourseStats {
-  courseId: number;
-  courseTitle: string;
-  courseSlug: string;
-  totalSeats: number;
-  claimedSeats: number;
+/** The person holding a claimed Seat. */
+export interface SeatHolder {
+  id: number;
+  name: string;
+  email: string;
 }
 
-/** One of the Buyer's Team Purchases, refunded whole or not at all. */
-export interface TeamPurchaseRow {
+/**
+ * One Seat on the roster. Its status is derived, never stored: claimed when
+ * someone holds it, refunded when its Team Purchase was refunded, otherwise
+ * open. Later states (invited, invited-paused) join this union, each with the
+ * fields only it has.
+ */
+export type RosterSeat =
+  | { id: number; code: string; status: "open" }
+  | { id: number; code: string; status: "refunded" }
+  | { id: number; code: string; status: "claimed"; holder: SeatHolder };
+
+export type RosterSeatStatus = RosterSeat["status"];
+
+/**
+ * The one purchase-wide notice a section shows: refunded (its Seats can no
+ * longer be claimed), paused (a Refund Request is waiting on a decision), or
+ * still-refundable (claiming any Seat will end Refund Eligibility).
+ */
+export type RosterBanner = "refunded" | "paused" | "still-refundable" | null;
+
+/** One Team Purchase and its Seats: one section of the Team page. */
+export interface RosterPurchase {
+  banner: RosterBanner;
   purchaseId: number;
-  courseTitle: string;
-  courseSlug: string;
+  course: { id: number; title: string; slug: string };
   purchasedAt: string;
   amount: number;
   totalSeats: number;
   claimedSeats: number;
   canRequestRefund: boolean;
   refundRequestStatus: RefundRequestStatus | null;
-}
-
-/** One Seat on the Team. */
-export interface SeatRow {
-  id: number;
-  code: string;
-  courseId: number;
-  courseTitle: string;
-  claimedByEmail: string | null;
-  refunded: boolean;
-  createdAt: string;
+  seats: RosterSeat[];
 }
 
 export interface TeamRoster {
-  courseStats: CourseStats[];
-  teamPurchases: TeamPurchaseRow[];
-  seatRows: SeatRow[];
+  purchases: RosterPurchase[];
 }
 
 export type TeamRosterRefusal = "no-team";
@@ -59,16 +60,16 @@ function getTeamSeats(teamId: number) {
   return db
     .select({
       seat: seats,
-      course: { title: courses.title, slug: courses.slug },
-      claimedByEmail: users.email,
+      holder: { id: users.id, name: users.name, email: users.email },
     })
     .from(seats)
-    .innerJoin(courses, eq(seats.courseId, courses.id))
     .leftJoin(users, eq(seats.claimedByUserId, users.id))
     .where(eq(seats.teamId, teamId))
     .orderBy(asc(seats.id))
     .all();
 }
+
+type TeamSeat = ReturnType<typeof getTeamSeats>[number];
 
 function getBuyerPurchases(buyerId: number, purchaseIds: number[]) {
   if (purchaseIds.length === 0) return [];
@@ -83,9 +84,36 @@ function getBuyerPurchases(buyerId: number, purchaseIds: number[]) {
     .all();
 }
 
+function toRosterSeat(
+  { seat, holder }: TeamSeat,
+  standing: PurchaseStanding
+): RosterSeat {
+  if (holder) {
+    return { id: seat.id, code: seat.code, status: "claimed", holder };
+  }
+  if (standing === "refunded") {
+    return { id: seat.id, code: seat.code, status: "refunded" };
+  }
+  return { id: seat.id, code: seat.code, status: "open" };
+}
+
 /**
- * The Team page for a Buyer, built only from their own Team: Seats claimed
- * per course, their Team Purchases and every Seat.
+ * Refund Eligibility already means no Seat claimed and no Refund Request, so
+ * the still-refundable warning follows it (and so follows #62's "ever
+ * claimed" once Refund Eligibility counts Released Seats).
+ */
+function bannerFor(
+  standing: PurchaseStanding,
+  canRequestRefund: boolean
+): RosterBanner {
+  if (standing === "refunded") return "refunded";
+  if (standing === "paused") return "paused";
+  return canRequestRefund ? "still-refundable" : null;
+}
+
+/**
+ * The Team page for a Buyer, built only from their own Team: one entry per
+ * Team Purchase, newest first, each with one entry per Seat.
  */
 export function getTeamRoster(
   buyerId: number
@@ -95,60 +123,35 @@ export function getTeamRoster(
 
   const teamSeats = getTeamSeats(team.id);
   const purchaseIds = [...new Set(teamSeats.map(({ seat }) => seat.purchaseId))];
-  const refundRequestStatuses = new Map(
-    purchaseIds.map((id) => [id, getRefundRequestStatus(id)])
-  );
 
-  const courseStats = new Map<number, CourseStats>();
-  for (const { seat, course } of teamSeats) {
-    const stats = courseStats.get(seat.courseId) ?? {
-      courseId: seat.courseId,
-      courseTitle: course.title,
-      courseSlug: course.slug,
-      totalSeats: 0,
-      claimedSeats: 0,
-    };
-    stats.totalSeats++;
-    if (seat.claimedByUserId !== null) stats.claimedSeats++;
-    courseStats.set(seat.courseId, stats);
-  }
+  const rosterPurchases = getBuyerPurchases(buyerId, purchaseIds)
+    .map(({ purchase, course }): RosterPurchase => {
+      const refundRequestStatus = getRefundRequestStatus(purchase.id);
+      const standing = standingFor(refundRequestStatus);
+      const purchaseSeats = teamSeats
+        .filter(({ seat }) => seat.purchaseId === purchase.id)
+        .map((teamSeat) => toRosterSeat(teamSeat, standing));
+      const canRequestRefund = getRefundEligibility(
+        purchase,
+        buyerId,
+        purchase.courseId
+      ).eligible;
 
-  const seatRows: SeatRow[] = teamSeats.map(({ seat, course, claimedByEmail }) => ({
-    id: seat.id,
-    code: seat.code,
-    courseId: seat.courseId,
-    courseTitle: course.title,
-    claimedByEmail,
-    refunded:
-      refundRequestStatuses.get(seat.purchaseId) ===
-      RefundRequestStatus.Approved,
-    createdAt: seat.createdAt,
-  }));
-
-  const teamPurchases: TeamPurchaseRow[] = getBuyerPurchases(buyerId, purchaseIds)
-    .map(({ purchase, course }) => {
-      const purchaseSeats = teamSeats.filter(
-        ({ seat }) => seat.purchaseId === purchase.id
-      );
       return {
         purchaseId: purchase.id,
-        courseTitle: course.title,
-        courseSlug: course.slug,
+        banner: bannerFor(standing, canRequestRefund),
+        course: { id: course.id, title: course.title, slug: course.slug },
         purchasedAt: purchase.createdAt,
         amount: purchase.amountPaid,
         totalSeats: purchaseSeats.length,
-        claimedSeats: purchaseSeats.filter(
-          ({ seat }) => seat.claimedByUserId !== null
-        ).length,
-        canRequestRefund: getRefundEligibility(purchase, buyerId, purchase.courseId)
-          .eligible,
-        refundRequestStatus: refundRequestStatuses.get(purchase.id) ?? null,
+        claimedSeats: purchaseSeats.filter((seat) => seat.status === "claimed")
+          .length,
+        canRequestRefund,
+        refundRequestStatus,
+        seats: purchaseSeats,
       };
     })
     .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt));
 
-  return {
-    ok: true,
-    roster: { courseStats: [...courseStats.values()], teamPurchases, seatRows },
-  };
+  return { ok: true, roster: { purchases: rosterPurchases } };
 }

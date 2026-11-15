@@ -28,7 +28,13 @@ export function getSeatByCode(code: string) {
 export type PurchaseStanding = "active" | "paused" | "refunded";
 
 export function getPurchaseStanding(purchaseId: number): PurchaseStanding {
-  const status = getRefundRequestStatus(purchaseId);
+  return standingFor(getRefundRequestStatus(purchaseId));
+}
+
+/** The standing a Team Purchase's latest Refund Request status gives it. */
+export function standingFor(
+  status: RefundRequestStatus | null
+): PurchaseStanding {
   if (status === RefundRequestStatus.Requested) return "paused";
   if (status === RefundRequestStatus.Approved) return "refunded";
   return "active";

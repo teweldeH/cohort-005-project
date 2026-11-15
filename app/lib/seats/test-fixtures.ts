@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import * as schema from "~/db/schema";
 import type { createTestDb, seedBaseData } from "~/test/setup";
 
@@ -19,7 +20,8 @@ export function seatFixtures(db: TestDb, base: BaseData) {
   }
 
   /**
-   * A Team Purchase by `buyerId` of `seats` Seats on the base course. Seat
+   * A Team Purchase by `buyerId` of `seats` Seats on the base course, on
+   * the Buyer's one Team (made with their first Team Purchase). Seat
    * codes are `<prefix>-<n>`; `claimedBy` claims the first Seats in order.
    */
   function buyTeamPurchase({
@@ -30,11 +32,22 @@ export function seatFixtures(db: TestDb, base: BaseData) {
     prefix = "SEAT",
     amountPaid = 20000,
     courseId = base.course.id,
+    purchasedAt = new Date().toISOString(),
   } = {}) {
-    const team = db.insert(schema.teams).values({}).returning().get();
+    const team =
+      db
+        .select({ id: schema.teams.id, createdAt: schema.teams.createdAt })
+        .from(schema.teams)
+        .innerJoin(schema.seats, eq(schema.seats.teamId, schema.teams.id))
+        .innerJoin(
+          schema.purchases,
+          eq(schema.seats.purchaseId, schema.purchases.id)
+        )
+        .where(eq(schema.purchases.userId, buyerId))
+        .get() ?? db.insert(schema.teams).values({}).returning().get();
     const purchase = db
       .insert(schema.purchases)
-      .values({ userId: buyerId, courseId, amountPaid, country })
+      .values({ userId: buyerId, courseId, amountPaid, country, createdAt: purchasedAt })
       .returning()
       .get();
 
