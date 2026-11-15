@@ -6,6 +6,7 @@ import {
   getRefundRequestStatus,
 } from "~/lib/refunds.server";
 import { getTeamForBuyer } from "~/lib/teams.server";
+import { getSeatProgress, type SeatProgress } from "./progress.server";
 import { standingFor, type PurchaseStanding } from "./queries.server";
 import { refuse, type SeatResult } from "./result";
 
@@ -32,7 +33,13 @@ export type RosterSeat =
       invitedAt: string;
     }
   | { id: number; code: string; status: "refunded" }
-  | { id: number; code: string; status: "claimed"; holder: SeatHolder };
+  | {
+      id: number;
+      code: string;
+      status: "claimed";
+      holder: SeatHolder;
+      progress: SeatProgress;
+    };
 
 export type RosterSeatStatus = RosterSeat["status"];
 
@@ -96,7 +103,13 @@ function toRosterSeat(
   standing: PurchaseStanding
 ): RosterSeat {
   if (holder) {
-    return { id: seat.id, code: seat.code, status: "claimed", holder };
+    return {
+      id: seat.id,
+      code: seat.code,
+      status: "claimed",
+      holder,
+      progress: getSeatProgress(holder.id, seat.courseId),
+    };
   }
   if (standing === "refunded") {
     return { id: seat.id, code: seat.code, status: "refunded" };

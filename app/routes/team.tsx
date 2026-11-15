@@ -13,6 +13,7 @@ import {
 } from "~/components/request-refund";
 import { cn, formatPrice, formatRelativeTime } from "~/lib/utils";
 import { parseFormData } from "~/lib/validation";
+import { SeatProgressBar, formatLastActive } from "~/components/seat-progress";
 import {
   getTeamRoster,
   inviteToSeat,
@@ -409,9 +410,18 @@ function PurchaseSection({ purchase }: { purchase: RosterPurchase }) {
                 <td className="px-4 py-3">
                   <StatusChip status={seat.status} />
                 </td>
-                {/* Progress and last active arrive with #58. */}
-                <td className="px-4 py-3" />
-                <td className="px-4 py-3 text-muted-foreground" />
+                <td className="px-4 py-3">
+                  {seat.status === "claimed" && (
+                    <SeatProgressBar
+                      percent={seat.progress.percent}
+                      finished={seat.progress.finished}
+                    />
+                  )}
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {seat.status === "claimed" &&
+                    formatLastActive(seat.progress.lastActive)}
+                </td>
                 <td className="px-4 py-3">
                   <SeatActions seat={seat} banner={purchase.banner} />
                 </td>

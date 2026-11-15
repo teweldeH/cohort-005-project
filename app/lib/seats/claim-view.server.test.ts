@@ -45,6 +45,7 @@ describe("getClaimView", () => {
       view: {
         course: { id: base.course.id, title: "Test Course", slug: "test-course" },
         code: "SEAT-1",
+        buyerName: "Test User",
         ...claimable,
       },
     });
@@ -125,6 +126,7 @@ describe("getClaimView", () => {
     expect(viewFor(code, invitee.id)).toEqual({
       course: { id: base.course.id, title: "Test Course", slug: "test-course" },
       code,
+      buyerName: "Test User",
       ...claimable,
       invitation: { forViewer: true },
     });

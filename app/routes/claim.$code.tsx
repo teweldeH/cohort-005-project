@@ -114,6 +114,7 @@ export default function Claim({ loaderData }: Route.ComponentProps) {
     course,
     code,
     invitation,
+    buyerName,
     alreadyClaimed,
     alreadyEnrolled,
     paused,
@@ -231,6 +232,9 @@ export default function Claim({ loaderData }: Route.ComponentProps) {
           ) : (
             <fetcher.Form method="post">
               <input type="hidden" name="intent" value="confirm-claim" />
+              <p className="mb-4 text-sm text-muted-foreground">
+                Your progress on this course will be visible to {buyerName}.
+              </p>
               <Button
                 size="lg"
                 className="w-full max-w-sm"

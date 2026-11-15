@@ -60,6 +60,7 @@ describe("getTeamRoster", () => {
         code: "SEAT-1",
         status: "claimed",
         holder: { id: holder.id, name: "Holly Holder", email: "holder@example.com" },
+        progress: { percent: 0, finished: false, lastActive: null },
       },
       { id: seats[1].id, code: "SEAT-2", status: "open" },
     ]);

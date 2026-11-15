@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { db } from "~/db";
+import { users } from "~/db/schema";
 import { refuse, type SeatResult } from "./result";
 import {
   getPurchaseStanding,
@@ -27,11 +30,23 @@ export interface ClaimView {
   code: string;
   /** Null for an open Seat, which anyone with the link may claim. */
   invitation: ClaimInvitation | null;
+  /** Who will see the claimer's Progress: the disclosure line names them. */
+  buyerName: string;
   alreadyClaimed: boolean;
   alreadyEnrolled: boolean;
   paused: boolean;
   refunded: boolean;
   countryMismatch: boolean;
+}
+
+function getBuyerName(buyerId: number) {
+  const buyer = db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, buyerId))
+    .get();
+
+  return buyer?.name ?? "the Buyer";
 }
 
 export type ClaimViewRefusal = "not-found" | "signed-out";
@@ -63,6 +78,7 @@ export function getClaimView(
       course: { id: course.id, title: course.title, slug: course.slug },
       code,
       invitation: invitationFor(seat, viewer.userId),
+      buyerName: getBuyerName(purchase.userId),
       alreadyClaimed,
       alreadyEnrolled,
       paused: standing === "paused",
