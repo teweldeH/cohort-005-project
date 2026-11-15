@@ -35,6 +35,18 @@ A single purchase by a Buyer that covers several Seats for one course.
 One person's place on a course from a Team Purchase, either unclaimed or claimed; claiming a Seat gives that person an Enrollment. The Seats of a refunded Team Purchase can never be claimed.
 _Avoid_: Coupon, licence, Redeem (for claim)
 
+**Invitation**:
+A Buyer's offer of one unclaimed Seat to a specific person, named by email, who alone can claim it.
+_Avoid_: Invite (as a noun), assignment
+
+**Release**:
+A Buyer taking back a claimed Seat, which ends its holder's Enrollment and leaves the Seat unclaimed. Giving a Seat to someone else is a Release followed by an Invitation.
+_Avoid_: Revoke, unassign, Reassign (as its own act)
+
+**Team**:
+The people holding Seats from one Buyer's Team Purchases.
+_Avoid_: Organisation, group, company
+
 **Enrollment**:
 A Student's access to one course, gained through an Own Purchase or a claimed Seat.
 _Avoid_: Access (as a noun), registration
