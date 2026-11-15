@@ -1,4 +1,5 @@
-import { getPurchaseStanding, getSeatByCode, invitationFor } from "./queries.server";
+import { getStanding } from "~/lib/purchase.server";
+import { getSeatByCode, invitationFor } from "./queries.server";
 import { reopenInvitedSeat } from "./reopen.server";
 import { refuse, type SeatResult } from "./result";
 
@@ -23,7 +24,7 @@ export function turnDownInvitation(
   if (seat.claimedByUserId !== null || !invitation?.forViewer) {
     return refuse("not-invitee");
   }
-  if (getPurchaseStanding(seat.purchaseId) === "paused") {
+  if (getStanding(seat.purchaseId) === "paused") {
     return refuse("paused");
   }
 

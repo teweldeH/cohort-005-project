@@ -3,7 +3,8 @@ import { db } from "~/db";
 import { seats, users } from "~/db/schema";
 import { newSeatCode } from "./codes.server";
 import { normaliseEmail } from "./email";
-import { getPurchaseStanding, getSeatWithBuyer } from "./queries.server";
+import { getStanding } from "~/lib/purchase.server";
+import { getSeatWithBuyer } from "./queries.server";
 import { reopenInvitedSeat } from "./reopen.server";
 import { refuse, type SeatResult } from "./result";
 
@@ -61,7 +62,7 @@ export function inviteToSeat(
     return refuse("not-open");
   }
 
-  const standing = getPurchaseStanding(seat.purchaseId);
+  const standing = getStanding(seat.purchaseId);
   if (standing !== "active") return refuse(standing);
 
   if (isDuplicateInvitation(seat, invitedEmail)) {
@@ -107,7 +108,7 @@ export function withdrawInvitation(
   const found = getSeatWithBuyer(seatId);
   if (!found) return refuse("not-found");
   if (found.buyerId !== buyerId) return refuse("not-buyer");
-  if (getPurchaseStanding(found.seat.purchaseId) === "paused") {
+  if (getStanding(found.seat.purchaseId) === "paused") {
     return refuse("paused");
   }
 

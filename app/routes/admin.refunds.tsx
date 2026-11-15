@@ -29,6 +29,7 @@ import {
   type RefundDecision,
 } from "~/lib/refunds.server";
 import { RefundRequestBadge } from "~/components/refund-request-badge";
+import { getPurchase } from "~/lib/purchase.server";
 
 const RECENTLY_DECIDED_LIMIT = 20;
 
@@ -172,15 +173,18 @@ export async function loader({ request }: Route.LoaderArgs) {
     .where(eq(refundRequests.status, RefundRequestStatus.Requested))
     .orderBy(asc(refundRequests.requestedAt))
     .all()
-    .map((refundRequest) => ({
-      ...refundRequest,
-      isOwnPurchaseOfAdmin: refundRequest.buyerId === admin.id,
-      usage: getUsage(
-        refundRequest.purchaseId,
-        refundRequest.buyerId,
-        refundRequest.courseId
-      ),
-    }));
+    .flatMap((refundRequest) => {
+      const purchase = getPurchase({ id: refundRequest.purchaseId });
+      if (!purchase) return [];
+
+      return [
+        {
+          ...refundRequest,
+          isOwnPurchaseOfAdmin: refundRequest.buyerId === admin.id,
+          usage: getUsage(purchase),
+        },
+      ];
+    });
 
   const recentlyDecided = selectRefundRequests()
     .where(ne(refundRequests.status, RefundRequestStatus.Requested))

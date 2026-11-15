@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { RefundRequestStatus } from "~/db/schema";
 import { createTestDb, seedBaseData } from "~/test/setup";
+import { getPurchase } from "~/lib/purchase.server";
 import {
   decideRefundRequest,
   getRefundEligibility,
@@ -173,8 +174,7 @@ describe("Refund Eligibility", () => {
     invite(seats[0].id, "ivy@example.com");
     invite(seats[1].id, "max@example.com");
 
-    expect(
-      getRefundEligibility(purchase, base.user.id, purchase.courseId)
-    ).toMatchObject({ eligible: true });
+    const read = getPurchase({ id: purchase.id });
+    expect(read && getRefundEligibility(read)).toMatchObject({ eligible: true });
   });
 });

@@ -1,13 +1,16 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "~/db";
-import { courses, purchases, seats, users, type RefundRequestStatus } from "~/db/schema";
 import {
-  getRefundEligibility,
-  getRefundRequestStatus,
-} from "~/lib/refunds.server";
+  courses,
+  purchases,
+  seats,
+  users,
+  type RefundRequestStatus,
+} from "~/db/schema";
+import { getPurchase, type Standing } from "~/lib/purchase.server";
+import { getRefundEligibility } from "~/lib/refunds.server";
 import { getTeamForBuyer } from "~/lib/teams.server";
 import { getSeatProgress, type SeatProgress } from "./progress.server";
-import { standingFor, type PurchaseStanding } from "./queries.server";
 import { isWithinReleaseLimit } from "./release.server";
 import { refuse, type SeatResult } from "./result";
 
@@ -92,11 +95,12 @@ function getTeamSeats(teamId: number) {
 
 type TeamSeat = ReturnType<typeof getTeamSeats>[number];
 
-function getBuyerPurchases(buyerId: number, purchaseIds: number[]) {
+/** The course of each of the Buyer's purchases among `purchaseIds`. */
+function getPurchaseCourses(buyerId: number, purchaseIds: number[]) {
   if (purchaseIds.length === 0) return [];
 
   return db
-    .select({ purchase: purchases, course: courses })
+    .select({ purchaseId: purchases.id, course: courses })
     .from(purchases)
     .innerJoin(courses, eq(purchases.courseId, courses.id))
     .where(
@@ -107,7 +111,7 @@ function getBuyerPurchases(buyerId: number, purchaseIds: number[]) {
 
 function toRosterSeat(
   { seat, holder }: TeamSeat,
-  standing: PurchaseStanding
+  standing: Standing
 ): RosterSeat {
   const base: RosterSeatBase = { id: seat.id, code: seat.code };
   if (holder) {
@@ -139,7 +143,7 @@ function toRosterSeat(
  * claimed" once Refund Eligibility counts Released Seats).
  */
 function bannerFor(
-  standing: PurchaseStanding,
+  standing: Standing,
   canRequestRefund: boolean
 ): RosterBanner {
   if (standing === "refunded") return "refunded";
@@ -158,34 +162,36 @@ export function getTeamRoster(
   if (!team) return refuse("no-team");
 
   const teamSeats = getTeamSeats(team.id);
-  const purchaseIds = [...new Set(teamSeats.map(({ seat }) => seat.purchaseId))];
+  const purchaseIds = [
+    ...new Set(teamSeats.map(({ seat }) => seat.purchaseId)),
+  ];
 
-  const rosterPurchases = getBuyerPurchases(buyerId, purchaseIds)
-    .map(({ purchase, course }): RosterPurchase => {
-      const refundRequestStatus = getRefundRequestStatus(purchase.id);
-      const standing = standingFor(refundRequestStatus);
+  const rosterPurchases = getPurchaseCourses(buyerId, purchaseIds)
+    .flatMap(({ purchaseId, course }): RosterPurchase[] => {
+      const purchase = getPurchase({ id: purchaseId });
+      if (!purchase) return [];
+      const { standing, refundRequestStatus } = purchase;
       const purchaseSeats = teamSeats
         .filter(({ seat }) => seat.purchaseId === purchase.id)
         .map((teamSeat) => toRosterSeat(teamSeat, standing));
-      const canRequestRefund = getRefundEligibility(
-        purchase,
-        buyerId,
-        purchase.courseId
-      ).eligible;
+      const canRequestRefund = getRefundEligibility(purchase).eligible;
 
-      return {
-        purchaseId: purchase.id,
-        banner: bannerFor(standing, canRequestRefund),
-        course: { id: course.id, title: course.title, slug: course.slug },
-        purchasedAt: purchase.createdAt,
-        amount: purchase.amountPaid,
-        totalSeats: purchaseSeats.length,
-        claimedSeats: purchaseSeats.filter((seat) => seat.status === "claimed")
-          .length,
-        canRequestRefund,
-        refundRequestStatus,
-        seats: purchaseSeats,
-      };
+      return [
+        {
+          purchaseId: purchase.id,
+          banner: bannerFor(standing, canRequestRefund),
+          course: { id: course.id, title: course.title, slug: course.slug },
+          purchasedAt: purchase.createdAt,
+          amount: purchase.amountPaid,
+          totalSeats: purchaseSeats.length,
+          claimedSeats: purchaseSeats.filter(
+            (seat) => seat.status === "claimed"
+          ).length,
+          canRequestRefund,
+          refundRequestStatus,
+          seats: purchaseSeats,
+        },
+      ];
     })
     .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt));
 

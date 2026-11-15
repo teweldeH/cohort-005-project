@@ -1,13 +1,13 @@
 import { asc, eq } from "drizzle-orm";
-import { db } from "~/db";
+import { db, type DbOrTransaction } from "~/db";
 import { purchases, seats, teams } from "~/db/schema";
 
 /**
  * The team a Buyer bought Seats for, found through their Team Purchases.
  * Claiming a Seat never makes someone a Buyer.
  */
-export function getTeamForBuyer(userId: number) {
-  return db
+export function getTeamForBuyer(userId: number, tx: DbOrTransaction = db) {
+  return tx
     .select({ id: teams.id, createdAt: teams.createdAt })
     .from(teams)
     .innerJoin(seats, eq(seats.teamId, teams.id))

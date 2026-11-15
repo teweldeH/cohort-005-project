@@ -3,16 +3,16 @@ import { z } from "zod";
 import type { Route } from "./+types/courses.$slug.refund";
 import { getCurrentUserId } from "~/lib/session";
 import { db } from "~/db";
-import { courses, purchases, refundRequests, users, RefundRequestStatus } from "~/db/schema";
-import { and, eq } from "drizzle-orm";
+import { courses, refundRequests, users, RefundRequestStatus } from "~/db/schema";
+import { eq } from "drizzle-orm";
 import { parseFormData, parseParams } from "~/lib/validation";
 import { formatPrice } from "~/lib/utils";
+import { getPurchase } from "~/lib/purchase.server";
 import {
-  isTeamPurchase,
   REFUND_WINDOW_DAYS,
   type RefundIneligibleReason,
 } from "~/lib/refunds";
-import { getRefundEligibility, getSeatCounts } from "~/lib/refunds.server";
+import { getRefundEligibility } from "~/lib/refunds.server";
 
 const INELIGIBLE_RESPONSES: Record<
   RefundIneligibleReason,
@@ -70,24 +70,6 @@ const refundActionSchema = z.object({
 
 function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
-}
-
-function getBuyerPurchase(
-  purchaseId: number,
-  userId: number,
-  courseId: number
-) {
-  return db
-    .select()
-    .from(purchases)
-    .where(
-      and(
-        eq(purchases.id, purchaseId),
-        eq(purchases.userId, userId),
-        eq(purchases.courseId, courseId)
-      )
-    )
-    .get();
 }
 
 /**
@@ -148,11 +130,11 @@ export async function action({ params, request }: Route.ActionArgs) {
     throw data("Choose the purchase you want refunded.", { status: 400 });
   }
 
-  const purchase = getBuyerPurchase(
-    purchaseChoice.data.purchaseId,
-    currentUserId,
-    course.id
-  );
+  const purchase = getPurchase({
+    id: purchaseChoice.data.purchaseId,
+    buyerId: currentUserId,
+    courseId: course.id,
+  });
 
   if (!purchase) {
     throw data("That purchase is not one of yours for this course.", {
@@ -160,7 +142,7 @@ export async function action({ params, request }: Route.ActionArgs) {
     });
   }
 
-  const eligibility = getRefundEligibility(purchase, currentUserId, course.id);
+  const eligibility = getRefundEligibility(purchase);
 
   if (!eligibility.eligible) {
     const { message, status } = INELIGIBLE_RESPONSES[eligibility.reason];
@@ -196,7 +178,5 @@ export async function action({ params, request }: Route.ActionArgs) {
   );
 
   // A Team Purchase's Buyer asked from /team, so that is where they go back.
-  return redirect(
-    isTeamPurchase(getSeatCounts(purchase.id)) ? "/team" : "/settings"
-  );
+  return redirect(purchase.kind === "team" ? "/team" : "/settings");
 }

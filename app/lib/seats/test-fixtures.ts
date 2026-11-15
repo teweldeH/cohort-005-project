@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
 import * as schema from "~/db/schema";
+import { getTeamForBuyer } from "~/lib/teams.server";
 import type { createTestDb, seedBaseData } from "~/test/setup";
 
 type TestDb = ReturnType<typeof createTestDb>;
@@ -35,16 +35,8 @@ export function seatFixtures(db: TestDb, base: BaseData) {
     purchasedAt = new Date().toISOString(),
   } = {}) {
     const team =
-      db
-        .select({ id: schema.teams.id, createdAt: schema.teams.createdAt })
-        .from(schema.teams)
-        .innerJoin(schema.seats, eq(schema.seats.teamId, schema.teams.id))
-        .innerJoin(
-          schema.purchases,
-          eq(schema.seats.purchaseId, schema.purchases.id)
-        )
-        .where(eq(schema.purchases.userId, buyerId))
-        .get() ?? db.insert(schema.teams).values({}).returning().get();
+      getTeamForBuyer(buyerId, db) ??
+      db.insert(schema.teams).values({}).returning().get();
     const purchase = db
       .insert(schema.purchases)
       .values({ userId: buyerId, courseId, amountPaid, country, createdAt: purchasedAt })

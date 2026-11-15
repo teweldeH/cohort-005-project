@@ -1,14 +1,6 @@
-import { and, eq } from "drizzle-orm";
-import { db } from "~/db";
-import {
-  courses,
-  enrollments,
-  purchases,
-  RefundRequestStatus,
-  seats,
-  users,
-} from "~/db/schema";
-import { getRefundRequestStatus } from "~/lib/refunds.server";
+import { eq } from "drizzle-orm";
+import { db, type DbOrTransaction } from "~/db";
+import { courses, purchases, seats, users } from "~/db/schema";
 import { normaliseEmail } from "./email";
 
 /** A Seat by its code, with the course and Team Purchase it belongs to. */
@@ -36,38 +28,6 @@ export function getSeatWithBuyer(seatId: number) {
 }
 
 /**
- * Whether a Team Purchase's Seats are paused (its Refund Request is waiting on
- * a decision) or refunded (the request was approved). Neither is stored: both
- * are read from the Refund Request.
- */
-export type PurchaseStanding = "active" | "paused" | "refunded";
-
-export function getPurchaseStanding(purchaseId: number): PurchaseStanding {
-  return standingFor(getRefundRequestStatus(purchaseId));
-}
-
-/** The standing a Team Purchase's latest Refund Request status gives it. */
-export function standingFor(
-  status: RefundRequestStatus | null
-): PurchaseStanding {
-  if (status === RefundRequestStatus.Requested) return "paused";
-  if (status === RefundRequestStatus.Approved) return "refunded";
-  return "active";
-}
-
-export function isUserEnrolled(userId: number, courseId: number) {
-  const existing = db
-    .select({ id: enrollments.id })
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
-
-  return !!existing;
-}
-
-/**
  * Seats may only be claimed from the Buyer's country. A purchase with no
  * recorded country can be claimed from anywhere.
  */
@@ -85,11 +45,12 @@ export function isCountryMismatch(
  */
 export function invitationFor(
   seat: { invitedEmail: string | null },
-  userId: number
+  userId: number,
+  tx: DbOrTransaction = db
 ): { forViewer: boolean } | null {
   if (seat.invitedEmail === null) return null;
 
-  const user = db
+  const user = tx
     .select({ email: users.email })
     .from(users)
     .where(eq(users.id, userId))

@@ -12,13 +12,9 @@ import {
   modules,
   lessons,
   enrollments,
-  purchases,
-  teams,
-  seats,
   CourseStatus,
 } from "~/db/schema";
-import { eq, and, or, sql } from "drizzle-orm";
-import { newSeatCode } from "~/lib/seats/index.server";
+import { eq, or, sql } from "drizzle-orm";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import {
@@ -34,9 +30,10 @@ import { UserAvatar } from "~/components/user-avatar";
 import { data } from "react-router";
 import { formatDuration, formatPrice } from "~/lib/utils";
 import { resolveCountry } from "~/lib/country.server";
-import { calculatePppPrice, getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
+import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { parseFormData, parseParams } from "~/lib/validation";
-import { getTeamForBuyer } from "~/lib/teams.server";
+import { isUserEnrolled } from "~/lib/enrollments.server";
+import { buy, quote } from "~/lib/purchase.server";
 
 function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
@@ -117,20 +114,6 @@ function getLessonCountForCourse(courseId: number) {
   return count?.count ?? 0;
 }
 
-function findEnrollment(userId: number, courseId: number) {
-  return db
-    .select()
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
-}
-
-function isUserEnrolled(userId: number, courseId: number) {
-  return !!findEnrollment(userId, courseId);
-}
-
 function getEnrollmentCountForCourse(courseId: number) {
   const result = db
     .select({ count: sql<number>`count(*)` })
@@ -139,97 +122,6 @@ function getEnrollmentCountForCourse(courseId: number) {
     .get();
 
   return result?.count ?? 0;
-}
-
-function enrollUser(
-  userId: number,
-  courseId: number,
-  sendEmail: boolean,
-  skipValidation: boolean
-) {
-  if (!skipValidation) {
-    const existing = findEnrollment(userId, courseId);
-    if (existing) {
-      throw new Error("User is already enrolled in this course");
-    }
-
-    const course = db
-      .select()
-      .from(courses)
-      .where(eq(courses.id, courseId))
-      .get();
-    if (!course) {
-      throw new Error("Course not found");
-    }
-  }
-
-  const enrollment = db
-    .insert(enrollments)
-    .values({ userId, courseId })
-    .returning()
-    .get();
-
-  if (sendEmail) {
-    // Would send welcome email here
-  }
-
-  return enrollment;
-}
-
-function createPurchase(
-  userId: number,
-  courseId: number,
-  amountPaid: number,
-  country: string | null
-) {
-  return db
-    .insert(purchases)
-    .values({ userId, courseId, amountPaid, country })
-    .returning()
-    .get();
-}
-
-function getOrCreateTeamForUser(userId: number) {
-  const existingTeam = getTeamForBuyer(userId);
-  if (existingTeam) return existingTeam;
-
-  return db.insert(teams).values({}).returning().get();
-}
-
-function generateSeats(
-  teamId: number,
-  courseId: number,
-  purchaseId: number,
-  quantity: number
-) {
-  const created: (typeof seats.$inferSelect)[] = [];
-  for (let i = 0; i < quantity; i++) {
-    const seat = db
-      .insert(seats)
-      .values({
-        teamId,
-        courseId,
-        code: newSeatCode(),
-        purchaseId,
-      })
-      .returning()
-      .get();
-    created.push(seat);
-  }
-  return created;
-}
-
-function createTeamPurchase(
-  userId: number,
-  courseId: number,
-  amountPaid: number,
-  country: string | null,
-  quantity: number
-) {
-  const purchase = createPurchase(userId, courseId, amountPaid, country);
-  const team = getOrCreateTeamForUser(userId);
-  const teamSeats = generateSeats(team.id, courseId, purchase.id, quantity);
-  return { purchase, team, seats: teamSeats };
 }
 
 const purchaseParamsSchema = z.object({
@@ -294,9 +186,7 @@ export async function loader({ params, request, url }: Route.LoaderArgs) {
   );
 
   const country = await resolveCountry(request);
-  const pppPrice = courseWithDetails.pppEnabled
-    ? calculatePppPrice(courseWithDetails.price, country)
-    : courseWithDetails.price;
+  const pppPrice = quote(courseWithDetails, country).perSeat;
   const tierInfo = getCountryTierInfo(country);
   const countryName = country
     ? (COUNTRIES.find((c) => c.code === country)?.name ?? country)
@@ -336,23 +226,20 @@ export async function action({ params, request }: Route.ActionArgs) {
   }
 
   const country = await resolveCountry(request);
-  const pppPrice = course.pppEnabled
-    ? calculatePppPrice(course.price, country)
-    : course.price;
 
   if (parsed.data.intent === "confirm-purchase") {
-    if (isUserEnrolled(currentUserId, course.id)) {
-      throw redirect(`/courses/${slug}`);
-    }
-    createPurchase(currentUserId, course.id, pppPrice, country);
-    enrollUser(currentUserId, course.id, false, false);
+    const result = buy({ buyerId: currentUserId, course, country });
+    if (!result.ok) throw redirect(`/courses/${slug}`);
     throw redirect(`/courses/${slug}/welcome`);
   }
 
-  // Team purchase — user does NOT get enrolled themselves
-  const { quantity } = parsed.data;
-  const totalPrice = pppPrice * quantity;
-  createTeamPurchase(currentUserId, course.id, totalPrice, country, quantity);
+  // A Team Purchase doesn't enroll the Buyer themselves.
+  buy({
+    buyerId: currentUserId,
+    course,
+    country,
+    seats: parsed.data.quantity,
+  });
   throw redirect(`/team`);
 }
 
