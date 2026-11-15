@@ -6,79 +6,13 @@ import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Users, BookOpen, Copy, Check, AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse } from "react-router";
-import { db } from "~/db";
-import {
-  seats,
-  courses,
-  purchases,
-  users,
-  RefundRequestStatus,
-} from "~/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { RefundRequestStatus } from "~/db/schema";
 import {
   RefundRequestDeclined,
   RequestRefund,
 } from "~/components/request-refund";
-import {
-  getRefundEligibility,
-  getRefundRequestStatus,
-} from "~/lib/refunds.server";
 import { formatPrice } from "~/lib/utils";
-import { getTeamForBuyer } from "~/lib/teams.server";
-
-function getSeatsForTeam(teamId: number) {
-  return db.select().from(seats).where(eq(seats.teamId, teamId)).all();
-}
-
-function getCourseById(id: number) {
-  return db.select().from(courses).where(eq(courses.id, id)).get();
-}
-
-function getUserById(id: number) {
-  return db.select().from(users).where(eq(users.id, id)).get();
-}
-
-function getBuyerPurchases(buyerId: number, purchaseIds: number[]) {
-  if (purchaseIds.length === 0) return [];
-
-  return db
-    .select()
-    .from(purchases)
-    .where(
-      and(eq(purchases.userId, buyerId), inArray(purchases.id, purchaseIds))
-    )
-    .all();
-}
-
-interface CourseStats {
-  courseId: number;
-  courseTitle: string;
-  courseSlug: string;
-  totalSeats: number;
-  claimedSeats: number;
-}
-
-interface TeamPurchaseRow {
-  purchaseId: number;
-  courseTitle: string;
-  courseSlug: string;
-  purchasedAt: string;
-  amount: number;
-  totalSeats: number;
-  claimedSeats: number;
-  canRequestRefund: boolean;
-  refundRequestStatus: RefundRequestStatus | null;
-}
-
-interface SeatRow {
-  id: number;
-  code: string;
-  courseId: number;
-  courseTitle: string;
-  claimedByEmail: string | null;
-  refunded: boolean;
-  createdAt: string;
-}
+import { getTeamRoster } from "~/lib/seats/index.server";
 
 export function meta() {
   return [
@@ -94,113 +28,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("Select a user from the DevUI panel.", { status: 401 });
   }
 
-  const team = getTeamForBuyer(currentUserId);
-
-  if (!team) {
+  const result = getTeamRoster(currentUserId);
+  if (!result.ok) {
     throw data("You don't have a team. Purchase team seats to create one.", {
       status: 403,
     });
   }
 
-  const allSeats = getSeatsForTeam(team.id);
-
-  // Build per-course stats
-  const courseMap = new Map<
-    number,
-    {
-      courseId: number;
-      courseTitle: string;
-      courseSlug: string;
-      total: number;
-      claimed: number;
-    }
-  >();
-
-  for (const seat of allSeats) {
-    let entry = courseMap.get(seat.courseId);
-    if (!entry) {
-      const course = getCourseById(seat.courseId);
-      entry = {
-        courseId: seat.courseId,
-        courseTitle: course?.title ?? "Unknown Course",
-        courseSlug: course?.slug ?? "",
-        total: 0,
-        claimed: 0,
-      };
-      courseMap.set(seat.courseId, entry);
-    }
-    entry.total++;
-    if (seat.claimedByUserId !== null) {
-      entry.claimed++;
-    }
-  }
-
-  const courseStats: CourseStats[] = Array.from(courseMap.values()).map(
-    (e) => ({
-      courseId: e.courseId,
-      courseTitle: e.courseTitle,
-      courseSlug: e.courseSlug,
-      totalSeats: e.total,
-      claimedSeats: e.claimed,
-    })
-  );
-
-  // Build Seat rows with claimer email
-  const refundRequestStatuses = new Map(
-    [...new Set(allSeats.map((seat) => seat.purchaseId))].map((purchaseId) => [
-      purchaseId,
-      getRefundRequestStatus(purchaseId),
-    ])
-  );
-
-  const seatRows: SeatRow[] = allSeats.map((seat) => {
-    let claimedByEmail: string | null = null;
-    if (seat.claimedByUserId !== null) {
-      const user = getUserById(seat.claimedByUserId);
-      claimedByEmail = user?.email ?? null;
-    }
-    const course = getCourseById(seat.courseId);
-    return {
-      id: seat.id,
-      code: seat.code,
-      courseId: seat.courseId,
-      courseTitle: course?.title ?? "Unknown Course",
-      claimedByEmail,
-      refunded:
-        refundRequestStatuses.get(seat.purchaseId) === RefundRequestStatus.Approved,
-      createdAt: seat.createdAt,
-    };
-  });
-
-  // The Team Purchases this Buyer paid for, each refunded whole or not at all.
-  const purchaseIds = [...new Set(allSeats.map((seat) => seat.purchaseId))];
-  const teamPurchases: TeamPurchaseRow[] = getBuyerPurchases(
-    currentUserId,
-    purchaseIds
-  )
-    .map((purchase) => {
-      const purchaseSeats = allSeats.filter((seat) => seat.purchaseId === purchase.id);
-      const course = getCourseById(purchase.courseId);
-      const eligibility = getRefundEligibility(
-        purchase,
-        currentUserId,
-        purchase.courseId
-      );
-      return {
-        purchaseId: purchase.id,
-        courseTitle: course?.title ?? "Unknown Course",
-        courseSlug: course?.slug ?? "",
-        purchasedAt: purchase.createdAt,
-        amount: purchase.amountPaid,
-        totalSeats: purchaseSeats.length,
-        claimedSeats: purchaseSeats.filter((seat) => seat.claimedByUserId !== null).length,
-        canRequestRefund: eligibility.eligible,
-        refundRequestStatus: refundRequestStatuses.get(purchase.id) ?? null,
-      };
-    })
-    .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt));
-
-  return { courseStats, teamPurchases, seatRows };
+  return result.roster;
 }
 
 function CopyButton({ code }: { code: string }) {
