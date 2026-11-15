@@ -55,3 +55,9 @@ export const db = /* @__PURE__ */ new Proxy({} as ReturnType<typeof getDb>, {
     return typeof value === "function" ? value.bind(target) : value;
   },
 });
+
+/** An open transaction, as handed to the callback of `db.transaction`. */
+export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Either the database or an open transaction, so a read can run in both. */
+export type DbOrTransaction = typeof db | Transaction;
