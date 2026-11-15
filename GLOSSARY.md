@@ -15,7 +15,7 @@ The full amount paid for a purchase, returned to its Buyer when a Refund Request
 _Avoid_: Reversal, Chargeback, Cancellation
 
 **Refund Eligibility**:
-The single set of conditions a purchase must meet for its Buyer to raise a Refund Request. An Own Purchase is judged by how much of the course its Buyer has taken; a Team Purchase qualifies only while none of its Seats is claimed, and no Seat can be claimed while it has a Refund Request open.
+The single set of conditions a purchase must meet for its Buyer to raise a Refund Request. An Own Purchase is judged by how much of the course its Buyer has taken; a Team Purchase qualifies only while none of its Seats has ever been claimed, even if since Released, and no Seat can be claimed while it has a Refund Request open.
 _Avoid_: Cancellation offer, cancel window
 
 ### Purchases
@@ -32,8 +32,28 @@ _Avoid_: Personal purchase, individual purchase
 A single purchase by a Buyer that covers several Seats for one course.
 
 **Seat**:
-One person's place on a course from a Team Purchase, either unclaimed or claimed; claiming a Seat gives that person an Enrollment. The Seats of a refunded Team Purchase can never be claimed.
+One person's place on a course from a Team Purchase, either unclaimed or claimed; claiming a Seat gives that person an Enrollment. An unclaimed Seat is either open, claimable by anyone with its link, or invited, held by an Invitation. The Seats of a refunded Team Purchase can never be claimed.
 _Avoid_: Coupon, licence, Redeem (for claim)
+
+**Invitation**:
+A Buyer's offer of one unclaimed Seat to a specific person, named by email, who alone can claim it. The invitee accepts by claiming the Seat.
+_Avoid_: Invite (as a noun), assignment, Accept (for claim)
+
+**Turn down**:
+An invitee refusing an Invitation, which leaves its Seat open again.
+_Avoid_: Decline (that is an Admin's answer to a Refund Request), reject
+
+**Release**:
+A Buyer taking back a claimed Seat, which ends its holder's Enrollment and leaves the Seat unclaimed. Allowed only while its holder is within the limits Refund Eligibility sets for an Own Purchase. Giving a Seat to someone else is a Release followed by an Invitation.
+_Avoid_: Revoke, unassign, Reassign (as its own act)
+
+**Team**:
+The people holding Seats from one Buyer's Team Purchases. The Buyer can see each current Seat holder's Progress, and the holder is told so.
+_Avoid_: Organisation, group, company
+
+**Progress**:
+How far a Student has got through one course: lessons completed, whether they've finished it, and when they were last active. It belongs to the Student and the course, not to the Seat or purchase that gave them their Enrollment, so it survives a Release and returns if they hold a Seat again.
+_Avoid_: Activity, tracking
 
 **Enrollment**:
 A Student's access to one course, gained through an Own Purchase or a claimed Seat.
