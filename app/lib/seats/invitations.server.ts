@@ -100,11 +100,16 @@ export function inviteToSeat(
   return { ok: true, seat: invited };
 }
 
-export type WithdrawRefusal = "not-found" | "not-buyer" | "not-invited";
+export type WithdrawRefusal =
+  | "not-found"
+  | "not-buyer"
+  | "paused"
+  | "not-invited";
 
 /**
  * Takes back a Seat's Invitation. The Seat is open again with a new code, so
- * the Invitation's link stops working.
+ * the Invitation's link stops working. Refused while a Refund Request is
+ * Requested: Invitations are paused, to resume unchanged if it is Declined.
  */
 export function withdrawInvitation(
   buyerId: number,
@@ -113,6 +118,9 @@ export function withdrawInvitation(
   const found = getSeatWithBuyer(seatId);
   if (!found) return refuse("not-found");
   if (found.buyerId !== buyerId) return refuse("not-buyer");
+  if (getPurchaseStanding(found.seat.purchaseId) === "paused") {
+    return refuse("paused");
+  }
 
   const withdrawn = db
     .update(seats)
