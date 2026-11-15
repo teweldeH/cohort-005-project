@@ -39,6 +39,7 @@ describe("getClaimView", () => {
       view: {
         course: { id: base.course.id, title: "Test Course", slug: "test-course" },
         code: "SEAT-1",
+        buyerName: "Test User",
         ...claimable,
       },
     });

@@ -55,6 +55,8 @@ import { calculatePppPrice, getCountryTierInfo } from "~/lib/ppp";
 import { parseFormData } from "~/lib/validation";
 import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
 import { StarRating, StarRatingInput } from "~/components/star-rating";
+import { getStudentCourseNotices } from "~/lib/seats/index.server";
+import { StudentCourseNotices } from "~/components/student-course-notices";
 
 function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
@@ -443,6 +445,9 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   let lessonProgressMap: Record<number, string> = {};
   let nextLessonId: number | null = null;
   let refundOffer: ReturnType<typeof getRefundOffer> = null;
+  const notices = currentUserId
+    ? getStudentCourseNotices(currentUserId, course.id)
+    : [];
 
   if (currentUserId) {
     enrolled = isUserEnrolled(currentUserId, course.id);
@@ -493,6 +498,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     ratingSummary,
     userRating,
     refundOffer,
+    notices,
   };
 }
 
@@ -594,6 +600,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
     ratingSummary,
     userRating,
     refundOffer,
+    notices,
   } = loaderData;
   const isInstructor = currentUserId === course.instructorId;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -787,6 +794,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
               </h2>
             </CardHeader>
             <CardContent className="space-y-4">
+              <StudentCourseNotices notices={notices} />
               {isInstructor ? (
                 <Link to={`/instructor/${course.id}`}>
                   <Button className="w-full">
