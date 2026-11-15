@@ -31,6 +31,10 @@ _Avoid_: Personal purchase, individual purchase
 **Team Purchase**:
 A single purchase by a Buyer that covers several Seats for one course.
 
+**Standing**:
+Where a purchase stands with respect to a Refund: active while it has no Refund Request open and none Approved, paused while its Refund Request waits on an Admin's decision, refunded once one is Approved. A Declined Refund Request leaves the purchase active.
+_Avoid_: Status (that belongs to the Refund Request), state
+
 **Seat**:
 One person's place on a course from a Team Purchase, either unclaimed or claimed; claiming a Seat gives that person an Enrollment. An unclaimed Seat is either open, claimable by anyone with its link, or invited, held by an Invitation. The Seats of a refunded Team Purchase can never be claimed.
 _Avoid_: Coupon, licence, Redeem (for claim)

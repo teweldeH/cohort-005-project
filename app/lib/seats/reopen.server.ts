@@ -1,7 +1,7 @@
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { db } from "~/db";
 import { seats } from "~/db/schema";
-import type { Transaction } from "~/lib/refunds.server";
+import type { Transaction } from "~/db";
 import { newSeatCode } from "./codes.server";
 
 /**

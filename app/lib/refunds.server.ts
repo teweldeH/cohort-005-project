@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, ne, notExists, sql } from "drizzle-orm";
-import { db } from "~/db";
+import { db, type Transaction } from "~/db";
 import {
   seats,
   seatReleases,
@@ -152,8 +152,6 @@ export function getCourseUsage(userId: number, courseId: number): CourseUsage {
     secondsWatched: getSecondsWatched(userId, lessonIds),
   };
 }
-
-export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * Whether a Student's Enrollment in a course is still given by something:
