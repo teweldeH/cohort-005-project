@@ -29,17 +29,3 @@ export function SeatProgressBar({
     </div>
   );
 }
-
-const DAY_MS = 86_400_000;
-
-/** When a Seat holder was last active, or "Never" if they haven't started. */
-export function formatLastActive(lastActive: string | null, now = new Date()) {
-  if (!lastActive) return "Never";
-  const days = Math.floor(
-    (now.getTime() - new Date(lastActive).getTime()) / DAY_MS
-  );
-  if (days <= 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 30) return `${days} days ago`;
-  return new Date(lastActive).toLocaleDateString();
-}

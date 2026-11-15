@@ -34,8 +34,8 @@ export const REFUND_WINDOW_DAYS = 14;
 export const REFUND_WATCH_LIMIT_SECONDS = 2 * 60 * 60;
 export const REFUND_COMPLETION_LIMIT = 0.5;
 
-/** How much of a course a learner has taken. */
-export type Learning = {
+/** How much of a course a Student has used: lessons completed and time watched. */
+export type CourseUsage = {
   lessonCount: number;
   completedLessonCount: number;
   secondsWatched: number;
@@ -46,22 +46,22 @@ export type OwnPurchaseLimitsCheck =
   | { within: false; reason: "too-much-completed" | "too-much-watched" };
 
 /**
- * Whether a learner is within the Own Purchase limits: under half the
+ * Whether a Student is within the Own Purchase limits: under half the
  * course's lessons completed and under 2 hours watched. Refund Eligibility
  * holds an Own Purchase's Buyer to them, and a Release its Seat holder.
  */
 export function checkOwnPurchaseLimits(
-  learning: Learning
+  usage: CourseUsage
 ): OwnPurchaseLimitsCheck {
   if (
-    learning.lessonCount > 0 &&
-    learning.completedLessonCount / learning.lessonCount >=
+    usage.lessonCount > 0 &&
+    usage.completedLessonCount / usage.lessonCount >=
       REFUND_COMPLETION_LIMIT
   ) {
     return { within: false, reason: "too-much-completed" };
   }
 
-  if (learning.secondsWatched >= REFUND_WATCH_LIMIT_SECONDS) {
+  if (usage.secondsWatched >= REFUND_WATCH_LIMIT_SECONDS) {
     return { within: false, reason: "too-much-watched" };
   }
 
@@ -71,7 +71,7 @@ export function checkOwnPurchaseLimits(
 /**
  * What is known about a purchase when checking Refund Eligibility. How much
  * of it has been used depends on what was bought: an Own Purchase is used by
- * its Buyer's learning, a Team Purchase by its Seats being claimed.
+ * its Buyer's own use of the course, a Team Purchase by its Seats being claimed.
  */
 export type RefundEligibilityFacts = {
   purchasedAt: string;
@@ -80,7 +80,7 @@ export type RefundEligibilityFacts = {
   // while it is open, and once decided the decision stands.
   refundRequestStatus: RefundRequestStatus | null;
   usage:
-    | ({ kind: "own" } & Learning)
+    | ({ kind: "own" } & CourseUsage)
     | {
         kind: "team";
         seats: number;
@@ -145,7 +145,7 @@ export function checkRefundEligibility(
   if (usage.kind === "team") {
     // A purchase is refunded whole or not at all, so one claimed Seat rules
     // out the Refund, and a Release never brings it back. Nobody learns from
-    // an unclaimed Seat, so the Buyer's own learning doesn't count here.
+    // an unclaimed Seat, so the Buyer's own use of the course doesn't count here.
     if (usage.everClaimedSeats > 0) {
       return { eligible: false, reason: "seat-claimed" };
     }

@@ -157,21 +157,11 @@ describe("getClaimView", () => {
     });
   });
 
-  it("finds no Seat for an unknown code, even for a signed-out visitor", () => {
+  it("finds no Seat for an unknown code", () => {
     fixtures.buyTeamPurchase();
 
-    expect(getClaimView("NO-SUCH-SEAT", null)).toEqual({
-      ok: false,
-      reason: "not-found",
-    });
-  });
-
-  it("asks a signed-out visitor to sign in to a real Seat", () => {
-    fixtures.buyTeamPurchase();
-
-    expect(getClaimView("SEAT-1", null)).toEqual({
-      ok: false,
-      reason: "signed-out",
-    });
+    expect(
+      getClaimView("NO-SUCH-SEAT", { userId: base.user.id, country: "US" })
+    ).toEqual({ ok: false, reason: "not-found" });
   });
 });

@@ -35,33 +35,33 @@ describe("findOwnPurchase", () => {
 });
 
 describe("checkOwnPurchaseLimits", () => {
-  // 2 hours, the most a learner may watch and still be within the limits.
+  // 2 hours, the most a Student may watch and still be within the limits.
   const twoHours = 7200;
   const fresh = { lessonCount: 10, completedLessonCount: 0, secondsWatched: 0 };
 
-  it("keeps a learner who has barely started within the limits", () => {
+  it("keeps a Student who has barely started within the limits", () => {
     expect(checkOwnPurchaseLimits(fresh)).toEqual({ within: true });
   });
 
-  it("keeps a learner just under half the lessons completed within the limits", () => {
+  it("keeps a Student just under half the lessons completed within the limits", () => {
     expect(
       checkOwnPurchaseLimits({ ...fresh, completedLessonCount: 4 })
     ).toEqual({ within: true });
   });
 
-  it("puts a learner with exactly half the lessons completed outside the limits", () => {
+  it("puts a Student with exactly half the lessons completed outside the limits", () => {
     expect(
       checkOwnPurchaseLimits({ ...fresh, completedLessonCount: 5 })
     ).toEqual({ within: false, reason: "too-much-completed" });
   });
 
-  it("keeps a learner just under 2 hours watched within the limits", () => {
+  it("keeps a Student just under 2 hours watched within the limits", () => {
     expect(
       checkOwnPurchaseLimits({ ...fresh, secondsWatched: twoHours - 1 })
     ).toEqual({ within: true });
   });
 
-  it("puts a learner with exactly 2 hours watched outside the limits", () => {
+  it("puts a Student with exactly 2 hours watched outside the limits", () => {
     expect(
       checkOwnPurchaseLimits({ ...fresh, secondsWatched: twoHours })
     ).toEqual({ within: false, reason: "too-much-watched" });
@@ -80,7 +80,7 @@ describe("checkOwnPurchaseLimits", () => {
 describe("checkRefundEligibility", () => {
   // An Own Purchase bought on 1 November, in local time, that would be
   // refundable today if nothing else got in the way.
-  const learning = {
+  const ownUsage = {
     kind: "own" as const,
     lessonCount: 10,
     completedLessonCount: 0,
@@ -90,12 +90,12 @@ describe("checkRefundEligibility", () => {
     purchasedAt: new Date(2026, 10, 1, 23, 0).toISOString(),
     amountPaid: 5000,
     refundRequestStatus: null,
-    usage: learning,
+    usage: ownUsage,
   };
   const now = new Date(2026, 10, 5, 12, 0);
 
-  function withLearning(change: Partial<typeof learning>) {
-    return { ...facts, usage: { ...learning, ...change } };
+  function withOwnUsage(change: Partial<typeof ownUsage>) {
+    return { ...facts, usage: { ...ownUsage, ...change } };
   }
 
   it("lets the Buyer ask for a Refund within the rules", () => {
@@ -109,32 +109,32 @@ describe("checkRefundEligibility", () => {
     // 60% done with barely anything watched: completion alone decides.
     expect(
       checkRefundEligibility(
-        withLearning({ completedLessonCount: 6, secondsWatched: 60 }),
+        withOwnUsage({ completedLessonCount: 6, secondsWatched: 60 }),
         now
       )
     ).toEqual({ eligible: false, reason: "too-much-completed" });
     expect(
-      checkRefundEligibility(withLearning({ completedLessonCount: 5 }), now)
+      checkRefundEligibility(withOwnUsage({ completedLessonCount: 5 }), now)
     ).toEqual({ eligible: false, reason: "too-much-completed" });
     expect(
-      checkRefundEligibility(withLearning({ completedLessonCount: 4 }), now)
+      checkRefundEligibility(withOwnUsage({ completedLessonCount: 4 }), now)
         .eligible
     ).toBe(true);
   });
 
   it("ignores completion for a course with no lessons", () => {
     expect(
-      checkRefundEligibility(withLearning({ lessonCount: 0 }), now).eligible
+      checkRefundEligibility(withOwnUsage({ lessonCount: 0 }), now).eligible
     ).toBe(true);
   });
 
   it("refuses once two hours have been watched", () => {
     expect(
-      checkRefundEligibility(withLearning({ secondsWatched: 2 * 60 * 60 }), now)
+      checkRefundEligibility(withOwnUsage({ secondsWatched: 2 * 60 * 60 }), now)
     ).toEqual({ eligible: false, reason: "too-much-watched" });
     expect(
       checkRefundEligibility(
-        withLearning({ secondsWatched: 2 * 60 * 60 - 1 }),
+        withOwnUsage({ secondsWatched: 2 * 60 * 60 - 1 }),
         now
       ).eligible
     ).toBe(true);

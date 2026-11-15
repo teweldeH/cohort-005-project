@@ -18,31 +18,35 @@ export interface SeatHolder {
   email: string;
 }
 
+/** What every Seat on the roster carries, whatever its status. */
+interface RosterSeatBase {
+  id: number;
+  code: string;
+}
+
 /**
  * One Seat on the roster. Its status is derived, never stored: claimed when
  * someone holds it, refunded when its Team Purchase was refunded, invited
  * while it is offered to one person by email (invited-paused while a Refund
  * Request is Requested), otherwise open. Each state carries only its fields.
  */
-export type RosterSeat =
-  | { id: number; code: string; status: "open" }
-  | {
-      id: number;
-      code: string;
-      status: "invited" | "invited-paused";
-      invitedEmail: string;
-      invitedAt: string;
-    }
-  | { id: number; code: string; status: "refunded" }
-  | {
-      id: number;
-      code: string;
-      status: "claimed";
-      holder: SeatHolder;
-      progress: SeatProgress;
-      releasable: boolean;
-      releaseBlockedReason: "past-release-limit" | null;
-    };
+export type RosterSeat = RosterSeatBase &
+  (
+    | { status: "open" }
+    | {
+        status: "invited" | "invited-paused";
+        invitedEmail: string;
+        invitedAt: string;
+      }
+    | { status: "refunded" }
+    | {
+        status: "claimed";
+        holder: SeatHolder;
+        progress: SeatProgress;
+        releasable: boolean;
+        releaseBlockedReason: "past-release-limit" | null;
+      }
+  );
 
 export type RosterSeatStatus = RosterSeat["status"];
 
@@ -105,11 +109,11 @@ function toRosterSeat(
   { seat, holder }: TeamSeat,
   standing: PurchaseStanding
 ): RosterSeat {
+  const base: RosterSeatBase = { id: seat.id, code: seat.code };
   if (holder) {
     const releasable = isWithinReleaseLimit(holder.id, seat.courseId);
     return {
-      id: seat.id,
-      code: seat.code,
+      ...base,
       status: "claimed",
       holder,
       progress: getSeatProgress(holder.id, seat.courseId),
@@ -117,19 +121,16 @@ function toRosterSeat(
       releaseBlockedReason: releasable ? null : "past-release-limit",
     };
   }
-  if (standing === "refunded") {
-    return { id: seat.id, code: seat.code, status: "refunded" };
-  }
+  if (standing === "refunded") return { ...base, status: "refunded" };
   if (seat.invitedEmail !== null) {
     return {
-      id: seat.id,
-      code: seat.code,
+      ...base,
       status: standing === "paused" ? "invited-paused" : "invited",
       invitedEmail: seat.invitedEmail,
       invitedAt: seat.invitedAt ?? seat.createdAt,
     };
   }
-  return { id: seat.id, code: seat.code, status: "open" };
+  return { ...base, status: "open" };
 }
 
 /**

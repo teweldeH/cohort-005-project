@@ -9,6 +9,7 @@ import {
   users,
 } from "~/db/schema";
 import { getRefundRequestStatus } from "~/lib/refunds.server";
+import { normaliseEmail } from "./email";
 
 /** A Seat by its code, with the course and Team Purchase it belongs to. */
 export function getSeatByCode(code: string) {
@@ -18,6 +19,19 @@ export function getSeatByCode(code: string) {
     .innerJoin(courses, eq(seats.courseId, courses.id))
     .innerJoin(purchases, eq(seats.purchaseId, purchases.id))
     .where(eq(seats.code, code))
+    .get();
+}
+
+/**
+ * A Seat and the Buyer of its Team Purchase. Only that Buyer may Invite to it,
+ * withdraw its Invitation or Release it.
+ */
+export function getSeatWithBuyer(seatId: number) {
+  return db
+    .select({ seat: seats, buyerId: purchases.userId })
+    .from(seats)
+    .innerJoin(purchases, eq(seats.purchaseId, purchases.id))
+    .where(eq(seats.id, seatId))
     .get();
 }
 
@@ -66,7 +80,7 @@ export function isCountryMismatch(
 
 /**
  * The Invitation on an unclaimed Seat, if it has one, and whether it is for
- * this user. Invited emails are stored lower-cased, so any letter case of the
+ * this user. Invited emails are stored normalised, so any letter case of the
  * user's email matches.
  */
 export function invitationFor(
@@ -81,5 +95,7 @@ export function invitationFor(
     .where(eq(users.id, userId))
     .get();
 
-  return { forViewer: user?.email.toLowerCase() === seat.invitedEmail };
+  return {
+    forViewer: !!user && normaliseEmail(user.email) === seat.invitedEmail,
+  };
 }

@@ -66,6 +66,7 @@ const TURN_DOWN_REFUSALS: Record<
     message: "Only the person this Invitation is for can Turn it down.",
     status: 403,
   },
+  paused: { message: SEAT_ON_HOLD_MESSAGE, status: 409 },
 };
 
 const claimParamsSchema = z.object({

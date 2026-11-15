@@ -1,9 +1,7 @@
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
-import type { db } from "~/db";
 import { seats } from "~/db/schema";
-import { newSeatCode } from "./codes.server";
-
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+import type { Transaction } from "~/lib/refunds.server";
+import { reopenInvitedSeat } from "./reopen.server";
 
 /**
  * Withdraws every outstanding Invitation on a Team Purchase whose Refund was
@@ -30,9 +28,6 @@ export function withdrawInvitationsOnRefund(
     .all();
 
   for (const { id } of invited) {
-    tx.update(seats)
-      .set({ invitedEmail: null, invitedAt: null, code: newSeatCode() })
-      .where(eq(seats.id, id))
-      .run();
+    reopenInvitedSeat(id, { tx });
   }
 }

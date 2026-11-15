@@ -9,7 +9,7 @@ import {
   inviteToSeat,
   releaseSeat,
 } from "./index.server";
-import { learningFixtures } from "./learning-fixtures";
+import { progressFixtures } from "./progress-fixtures";
 import { seatFixtures } from "./test-fixtures";
 
 let testDb: ReturnType<typeof createTestDb>;
@@ -22,13 +22,13 @@ vi.mock("~/db", () => ({
 
 let base: ReturnType<typeof seedBaseData>;
 let fixtures: ReturnType<typeof seatFixtures>;
-let learning: ReturnType<typeof learningFixtures>;
+let progress: ReturnType<typeof progressFixtures>;
 
 beforeEach(() => {
   testDb = createTestDb();
   base = seedBaseData(testDb);
   fixtures = seatFixtures(testDb, base);
-  learning = learningFixtures(testDb, base);
+  progress = progressFixtures(testDb, base);
 });
 
 function rosterSeats(buyerId = base.user.id) {
@@ -124,10 +124,10 @@ describe("releaseSeat", () => {
   });
 
   it("refuses once the holder has completed half the lessons", () => {
-    const lessons = learning.addLessons(4);
+    const lessons = progress.addLessons(4);
     const { holder, seat } = claimedSeat();
-    learning.completeLesson(holder.id, lessons[0].id, "2026-11-01T10:00:00Z");
-    learning.completeLesson(holder.id, lessons[1].id, "2026-11-01T11:00:00Z");
+    progress.completeLesson(holder.id, lessons[0].id, "2026-11-01T10:00:00Z");
+    progress.completeLesson(holder.id, lessons[1].id, "2026-11-01T11:00:00Z");
 
     expect(releaseSeat(base.user.id, seat.id)).toEqual({
       ok: false,
@@ -137,18 +137,18 @@ describe("releaseSeat", () => {
   });
 
   it("allows a Release just under half the lessons", () => {
-    const lessons = learning.addLessons(4);
+    const lessons = progress.addLessons(4);
     const { holder, seat } = claimedSeat();
-    learning.completeLesson(holder.id, lessons[0].id, "2026-11-01T10:00:00Z");
+    progress.completeLesson(holder.id, lessons[0].id, "2026-11-01T10:00:00Z");
 
     expect(releaseSeat(base.user.id, seat.id).ok).toBe(true);
   });
 
   it("refuses once the holder has watched 2 hours", () => {
-    const lessons = learning.addLessons(4);
+    const lessons = progress.addLessons(4);
     const { holder, seat } = claimedSeat();
-    learning.watchVideo(holder.id, lessons[0].id, "2026-11-01T10:00:00Z", 3600);
-    learning.watchVideo(holder.id, lessons[1].id, "2026-11-01T11:00:00Z", 3600);
+    progress.watchVideo(holder.id, lessons[0].id, "2026-11-01T10:00:00Z", 3600);
+    progress.watchVideo(holder.id, lessons[1].id, "2026-11-01T11:00:00Z", 3600);
 
     expect(releaseSeat(base.user.id, seat.id)).toEqual({
       ok: false,
@@ -157,10 +157,10 @@ describe("releaseSeat", () => {
   });
 
   it("counts dormant Progress from before the Seat towards the limit", () => {
-    const lessons = learning.addLessons(4);
+    const lessons = progress.addLessons(4);
     const holder = fixtures.addStudent("holder@example.com");
-    learning.completeLesson(holder.id, lessons[0].id, "2026-10-01T10:00:00Z");
-    learning.completeLesson(holder.id, lessons[1].id, "2026-10-01T11:00:00Z");
+    progress.completeLesson(holder.id, lessons[0].id, "2026-10-01T10:00:00Z");
+    progress.completeLesson(holder.id, lessons[1].id, "2026-10-01T11:00:00Z");
     const { seats } = fixtures.buyTeamPurchase();
     claimSeat("SEAT-1", holder.id, "US");
 
@@ -181,13 +181,13 @@ describe("releaseSeat", () => {
   });
 
   it("shows the roster which claimed Seats can be Released", () => {
-    const lessons = learning.addLessons(2);
+    const lessons = progress.addLessons(2);
     const within = fixtures.addStudent("within@example.com");
     const past = fixtures.addStudent("past@example.com");
     fixtures.buyTeamPurchase();
     claimSeat("SEAT-1", within.id, "US");
     claimSeat("SEAT-2", past.id, "US");
-    learning.completeLesson(past.id, lessons[0].id, "2026-11-01T10:00:00Z");
+    progress.completeLesson(past.id, lessons[0].id, "2026-11-01T10:00:00Z");
 
     expect(rosterSeats()).toMatchObject([
       { status: "claimed", releasable: true, releaseBlockedReason: null },
@@ -200,9 +200,9 @@ describe("releaseSeat", () => {
   });
 
   it("brings earlier Progress back when the former holder is invited again", () => {
-    const lessons = learning.addLessons(4);
+    const lessons = progress.addLessons(4);
     const { holder, seat } = claimedSeat();
-    learning.completeLesson(holder.id, lessons[0].id, "2026-11-01T10:00:00Z");
+    progress.completeLesson(holder.id, lessons[0].id, "2026-11-01T10:00:00Z");
     releaseSeat(base.user.id, seat.id);
 
     const invited = inviteToSeat(base.user.id, seat.id, holder.email);
