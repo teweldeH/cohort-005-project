@@ -6,6 +6,7 @@ import {
   purchases,
   RefundRequestStatus,
   seats,
+  users,
 } from "~/db/schema";
 import { getRefundRequestStatus } from "~/lib/refunds.server";
 
@@ -61,4 +62,24 @@ export function isCountryMismatch(
   country: string | null
 ) {
   return !!purchase.country && purchase.country !== (country ?? "");
+}
+
+/**
+ * The Invitation on an unclaimed Seat, if it has one, and whether it is for
+ * this user. Invited emails are stored lower-cased, so any letter case of the
+ * user's email matches.
+ */
+export function invitationFor(
+  seat: { invitedEmail: string | null },
+  userId: number
+): { forViewer: boolean } | null {
+  if (seat.invitedEmail === null) return null;
+
+  const user = db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, userId))
+    .get();
+
+  return { forViewer: user?.email.toLowerCase() === seat.invitedEmail };
 }

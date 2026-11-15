@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { RefundRequestStatus } from "~/db/schema";
 import { createTestDb, seedBaseData } from "~/test/setup";
-import { claimSeat, getClaimView } from "./index.server";
+import {
+  claimSeat,
+  getClaimView,
+  inviteToSeat,
+  withdrawInvitation,
+} from "./index.server";
 import { seatFixtures } from "./test-fixtures";
 
 let testDb: ReturnType<typeof createTestDb>;
@@ -22,6 +27,7 @@ beforeEach(() => {
 });
 
 const claimable = {
+  invitation: null,
   alreadyClaimed: false,
   alreadyEnrolled: false,
   paused: false,
@@ -103,6 +109,50 @@ describe("getClaimView", () => {
     expect(viewFor("SEAT-1", viewer.id, "DE")).toMatchObject({
       ...claimable,
       countryMismatch: true,
+    });
+  });
+
+  function invite(seatId: number, email: string) {
+    const result = inviteToSeat(base.user.id, seatId, email);
+    if (!result.ok) throw new Error(`Invite refused: ${result.reason}`);
+    return result.seat.code;
+  }
+
+  it("shows the invitee their Invitation, whatever the letter case of their email", () => {
+    const invitee = fixtures.addStudent("Ivy@Example.com");
+    const { seats } = fixtures.buyTeamPurchase();
+    const code = invite(seats[0].id, "ivy@example.COM");
+
+    expect(viewFor(code, invitee.id)).toEqual({
+      course: { id: base.course.id, title: "Test Course", slug: "test-course" },
+      code,
+      buyerName: "Test User",
+      ...claimable,
+      invitation: { forViewer: true },
+    });
+  });
+
+  it("tells anyone else the Invitation is for a different address", () => {
+    fixtures.addStudent("ivy@example.com");
+    const other = fixtures.addStudent("other@example.com");
+    const { seats } = fixtures.buyTeamPurchase();
+    const code = invite(seats[0].id, "ivy@example.com");
+
+    expect(viewFor(code, other.id)).toMatchObject({
+      ...claimable,
+      invitation: { forViewer: false },
+    });
+  });
+
+  it("finds no Seat for a link whose Invitation was withdrawn", () => {
+    const invitee = fixtures.addStudent("ivy@example.com");
+    const { seats } = fixtures.buyTeamPurchase();
+    const code = invite(seats[0].id, "ivy@example.com");
+    withdrawInvitation(base.user.id, seats[0].id);
+
+    expect(getClaimView(code, { userId: invitee.id, country: "US" })).toEqual({
+      ok: false,
+      reason: "not-found",
     });
   });
 

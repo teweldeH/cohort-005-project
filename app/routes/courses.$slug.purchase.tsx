@@ -18,7 +18,7 @@ import {
   CourseStatus,
 } from "~/db/schema";
 import { eq, and, or, sql } from "drizzle-orm";
-import crypto from "crypto";
+import { newSeatCode } from "~/lib/seats/index.server";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import {
@@ -209,7 +209,7 @@ function generateSeats(
       .values({
         teamId,
         courseId,
-        code: crypto.randomBytes(12).toString("base64url"),
+        code: newSeatCode(),
         purchaseId,
       })
       .returning()

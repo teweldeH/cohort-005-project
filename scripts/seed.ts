@@ -2348,6 +2348,15 @@ This course is still in draft while the cluster examples are rewritten against t
     .where(eq(schema.seats.id, seededSeats[1].id))
     .run();
 
+  // Offer the last Seat to Sophia as an Invitation she hasn't claimed yet.
+  db.update(schema.seats)
+    .set({
+      invitedEmail: "sophia.davis@student.dev",
+      invitedAt: daysAgo(3),
+    })
+    .where(eq(schema.seats.id, seededSeats[4].id))
+    .run();
+
   console.log(
     `Created 1 team with Bossy McBossface as Buyer, 1 team purchase, and ${seededSeats.length} Seats (${countRows(schema.seats, isNotNull(schema.seats.claimedByUserId))} claimed, ${countRows(schema.seats, isNull(schema.seats.claimedByUserId))} available).`
   );

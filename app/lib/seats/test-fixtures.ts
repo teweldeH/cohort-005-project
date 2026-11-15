@@ -92,5 +92,22 @@ export function seatFixtures(db: TestDb, base: BaseData) {
       .get();
   }
 
-  return { addStudent, buyTeamPurchase, addRefundRequest, enroll };
+  /** Another published course by the base instructor. */
+  function addCourse(slug: string) {
+    return db
+      .insert(schema.courses)
+      .values({
+        title: slug,
+        slug,
+        description: slug,
+        salesCopy: slug,
+        instructorId: base.instructor.id,
+        categoryId: base.category.id,
+        status: schema.CourseStatus.Published,
+      })
+      .returning()
+      .get();
+  }
+
+  return { addStudent, addCourse, buyTeamPurchase, addRefundRequest, enroll };
 }

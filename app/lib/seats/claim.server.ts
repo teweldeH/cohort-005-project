@@ -5,6 +5,7 @@ import { refuse, type SeatResult } from "./result";
 import {
   getPurchaseStanding,
   getSeatByCode,
+  invitationFor,
   isCountryMismatch,
   isUserEnrolled,
 } from "./queries.server";
@@ -14,6 +15,7 @@ export type ClaimRefusal =
   | "already-claimed"
   | "paused"
   | "refunded"
+  | "not-invited-email"
   | "already-enrolled"
   | "country-mismatch";
 
@@ -44,6 +46,10 @@ export function claimSeat(
   const standing = getPurchaseStanding(seat.purchaseId);
   if (standing !== "active") return refuse(standing);
 
+  // An invited Seat is held for one person; only their account may claim it.
+  const invitation = invitationFor(seat, userId);
+  if (invitation && !invitation.forViewer) return refuse("not-invited-email");
+
   if (isUserEnrolled(userId, seat.courseId)) {
     return refuse("already-enrolled");
   }
@@ -53,8 +59,21 @@ export function claimSeat(
   return db.transaction((tx) => {
     const claimed = tx
       .update(seats)
-      .set({ claimedByUserId: userId, claimedAt: new Date().toISOString() })
-      .where(and(eq(seats.id, seat.id), isNull(seats.claimedByUserId)))
+      .set({
+        claimedByUserId: userId,
+        claimedAt: new Date().toISOString(),
+        invitedEmail: null,
+        invitedAt: null,
+      })
+      // The code must still be current, so an Invitation made or withdrawn
+      // since this claim began wins over it.
+      .where(
+        and(
+          eq(seats.id, seat.id),
+          eq(seats.code, code),
+          isNull(seats.claimedByUserId)
+        )
+      )
       .returning({ id: seats.id })
       .get();
     if (!claimed) return refuse("already-claimed");

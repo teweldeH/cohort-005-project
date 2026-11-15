@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useFetcher } from "react-router";
+import { z } from "zod";
 import type { Route } from "./+types/team";
 import { getCurrentUserId } from "~/lib/session";
 import { Button } from "~/components/ui/button";
@@ -10,10 +11,15 @@ import {
   RefundRequestDeclined,
   RequestRefund,
 } from "~/components/request-refund";
-import { cn, formatPrice } from "~/lib/utils";
+import { cn, formatPrice, formatRelativeTime } from "~/lib/utils";
+import { parseFormData } from "~/lib/validation";
 import { SeatProgressBar, formatLastActive } from "~/components/seat-progress";
 import {
   getTeamRoster,
+  inviteToSeat,
+  withdrawInvitation,
+  type InviteRefusal,
+  type WithdrawRefusal,
   type RosterBanner,
   type RosterPurchase,
   type RosterSeat,
@@ -42,6 +48,102 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   return result.roster;
+}
+
+const seatActionSchema = z.discriminatedUnion("intent", [
+  z.object({
+    intent: z.literal("invite"),
+    seatId: z.coerce.number().int().positive(),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .email("Enter the email address of the person to invite."),
+  }),
+  z.object({
+    intent: z.literal("withdraw"),
+    seatId: z.coerce.number().int().positive(),
+  }),
+]);
+
+const NOT_BUYER = "Only the Buyer can manage this Seat.";
+
+/**
+ * Why an Invitation was refused. The Buyer can fix the ones marked
+ * `correctable` from the invite form, so they come back to it as a message.
+ */
+const INVITE_REFUSALS: Record<
+  InviteRefusal,
+  { message: string; status: number; correctable: boolean }
+> = {
+  "not-found": { message: "Seat not found.", status: 404, correctable: false },
+  "not-buyer": { message: NOT_BUYER, status: 403, correctable: false },
+  "not-open": {
+    message: "This Seat is no longer open.",
+    status: 409,
+    correctable: true,
+  },
+  paused: {
+    message: "Invitations are paused while your Refund Request is reviewed.",
+    status: 409,
+    correctable: true,
+  },
+  refunded: {
+    message: "This purchase was refunded, so its Seats can't be offered.",
+    status: 410,
+    correctable: true,
+  },
+  "duplicate-invitation": {
+    message:
+      "That email already holds an Invitation or a Seat for this course on your Team.",
+    status: 409,
+    correctable: true,
+  },
+};
+
+const WITHDRAW_REFUSALS: Record<
+  WithdrawRefusal,
+  { message: string; status: number }
+> = {
+  "not-found": { message: "Seat not found.", status: 404 },
+  "not-buyer": { message: NOT_BUYER, status: 403 },
+  "not-invited": {
+    message: "This Seat has no Invitation to withdraw.",
+    status: 409,
+  },
+};
+
+export async function action({ request }: Route.ActionArgs) {
+  const currentUserId = await getCurrentUserId(request);
+  if (!currentUserId) {
+    throw data("Select a user from the DevUI panel.", { status: 401 });
+  }
+
+  const parsed = parseFormData(await request.formData(), seatActionSchema);
+  if (!parsed.success) {
+    return data(
+      { error: Object.values(parsed.errors)[0] ?? "Invalid request." },
+      { status: 400 }
+    );
+  }
+
+  if (parsed.data.intent === "invite") {
+    const { seatId, email } = parsed.data;
+    const result = inviteToSeat(currentUserId, seatId, email);
+    if (!result.ok) {
+      const { message, status, correctable } = INVITE_REFUSALS[result.reason];
+      if (!correctable) throw data(message, { status });
+      return data({ error: message }, { status });
+    }
+    return { error: null };
+  }
+
+  const result = withdrawInvitation(currentUserId, parsed.data.seatId);
+  if (!result.ok) {
+    const { message, status } = WITHDRAW_REFUSALS[result.reason];
+    throw data(message, { status });
+  }
+  return { error: null };
 }
 
 function CopyLink({ code }: { code: string }) {
@@ -107,12 +209,15 @@ function PurchaseBanner({ banner }: { banner: RosterBanner }) {
 
 const STATUS_LABEL: Record<RosterSeatStatus, string> = {
   claimed: "Claimed",
+  invited: "Invited",
   open: "Open",
   refunded: "Refunded",
 };
 
 const STATUS_STYLE: Record<RosterSeatStatus, string> = {
   claimed: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  invited:
+    "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   open: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   refunded: "bg-muted text-muted-foreground",
 };
@@ -140,14 +245,81 @@ function SeatPerson({ seat }: { seat: RosterSeat }) {
       </>
     );
   }
+  if (seat.status === "invited") {
+    return (
+      <>
+        <p>{seat.invitedEmail}</p>
+        <p className="text-xs text-muted-foreground">
+          Invited {formatRelativeTime(seat.invitedAt)}
+        </p>
+      </>
+    );
+  }
   return (
     <code className="rounded bg-muted px-2 py-0.5 text-xs">{seat.code}</code>
   );
 }
 
+/** Offers an open Seat to one person, named by email. */
+function InviteForm({ seatId }: { seatId: number }) {
+  const fetcher = useFetcher<typeof action>();
+  const error = fetcher.state === "idle" ? fetcher.data?.error : null;
+
+  return (
+    <fetcher.Form method="post" className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <input type="hidden" name="intent" value="invite" />
+        <input type="hidden" name="seatId" value={seatId} />
+        <input
+          type="email"
+          name="email"
+          required
+          aria-label="Email to invite"
+          aria-invalid={!!error}
+          placeholder="name@company.com"
+          className="w-48 rounded-md border border-input bg-background px-2 py-1 text-sm"
+        />
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={fetcher.state !== "idle"}
+        >
+          Invite
+        </Button>
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </fetcher.Form>
+  );
+}
+
+function WithdrawButton({ seatId }: { seatId: number }) {
+  const fetcher = useFetcher<typeof action>();
+
+  return (
+    <fetcher.Form method="post">
+      <input type="hidden" name="intent" value="withdraw" />
+      <input type="hidden" name="seatId" value={seatId} />
+      <Button
+        type="submit"
+        size="sm"
+        variant="ghost"
+        disabled={fetcher.state !== "idle"}
+      >
+        Withdraw
+      </Button>
+    </fetcher.Form>
+  );
+}
+
 /**
- * What the Buyer can do with one Seat. An open Seat's link can be shared
- * unless a Refund Request has paused the purchase.
+ * What the Buyer can do with one Seat: Invite to an open Seat or share its
+ * link, copy or Withdraw an Invitation. Nothing while a Refund Request has
+ * paused the purchase.
  */
 function SeatActions({
   seat,
@@ -156,8 +328,23 @@ function SeatActions({
   seat: RosterSeat;
   banner: RosterBanner;
 }) {
-  if (seat.status === "open" && banner !== "paused") {
-    return <CopyLink code={seat.code} />;
+  if (banner === "paused") return null;
+  if (seat.status === "open") {
+    return (
+      <div className="flex flex-wrap items-start gap-2">
+        <InviteForm seatId={seat.id} />
+        <span className="py-1 text-xs text-muted-foreground">or</span>
+        <CopyLink code={seat.code} />
+      </div>
+    );
+  }
+  if (seat.status === "invited") {
+    return (
+      <div className="flex items-center gap-1">
+        <CopyLink code={seat.code} />
+        <WithdrawButton seatId={seat.id} />
+      </div>
+    );
   }
   return null;
 }

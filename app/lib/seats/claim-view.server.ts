@@ -5,6 +5,7 @@ import { refuse, type SeatResult } from "./result";
 import {
   getPurchaseStanding,
   getSeatByCode,
+  invitationFor,
   isCountryMismatch,
   isUserEnrolled,
 } from "./queries.server";
@@ -15,10 +16,20 @@ export interface ClaimViewer {
   country: string | null;
 }
 
+/**
+ * The Invitation a Seat is held under, as the viewer may see it: only whether
+ * it is for them, never whose address it is for.
+ */
+export interface ClaimInvitation {
+  forViewer: boolean;
+}
+
 /** What the claim page shows for a Seat code. */
 export interface ClaimView {
   course: { id: number; title: string; slug: string };
   code: string;
+  /** Null for an open Seat, which anyone with the link may claim. */
+  invitation: ClaimInvitation | null;
   /** Who will see the claimer's Progress: the disclosure line names them. */
   buyerName: string;
   alreadyClaimed: boolean;
@@ -42,7 +53,8 @@ export type ClaimViewRefusal = "not-found" | "signed-out";
 
 /**
  * What the claim page needs to show a viewer for a Seat code. An unknown code
- * is reported before asking a signed-out visitor to sign in.
+ * (including one replaced when an Invitation was made or withdrawn) is
+ * reported before asking a signed-out visitor to sign in.
  */
 export function getClaimView(
   code: string,
@@ -65,6 +77,7 @@ export function getClaimView(
     view: {
       course: { id: course.id, title: course.title, slug: course.slug },
       code,
+      invitation: invitationFor(seat, viewer.userId),
       buyerName: getBuyerName(purchase.userId),
       alreadyClaimed,
       alreadyEnrolled,
