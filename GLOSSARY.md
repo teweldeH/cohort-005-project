@@ -48,8 +48,12 @@ A Buyer taking back a claimed Seat, which ends its holder's Enrollment and leave
 _Avoid_: Revoke, unassign, Reassign (as its own act)
 
 **Team**:
-The people holding Seats from one Buyer's Team Purchases.
+The people holding Seats from one Buyer's Team Purchases. The Buyer can see each current Seat holder's Progress, and the holder is told so.
 _Avoid_: Organisation, group, company
+
+**Progress**:
+How far a Student has got through one course: lessons completed, whether they've finished it, and when they were last active. It belongs to the Student and the course, not to the Seat or purchase that gave them their Enrollment, so it survives a Release and returns if they hold a Seat again.
+_Avoid_: Activity, tracking
 
 **Enrollment**:
 A Student's access to one course, gained through an Own Purchase or a claimed Seat.
