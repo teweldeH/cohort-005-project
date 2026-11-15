@@ -1,8 +1,10 @@
-import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "~/db";
-import { purchases, seats, users } from "~/db/schema";
+import { seats, users } from "~/db/schema";
 import { newSeatCode } from "./codes.server";
-import { getPurchaseStanding } from "./queries.server";
+import { normaliseEmail } from "./email";
+import { getPurchaseStanding, getSeatWithBuyer } from "./queries.server";
+import { reopenInvitedSeat } from "./reopen.server";
 import { refuse, type SeatResult } from "./result";
 
 export type InviteRefusal =
@@ -12,19 +14,6 @@ export type InviteRefusal =
   | "paused"
   | "refunded"
   | "duplicate-invitation";
-
-/**
- * A Seat and the Buyer of its Team Purchase. Only that Buyer may Invite to it,
- * withdraw its Invitation or Release it.
- */
-export function getSeatWithBuyer(seatId: number) {
-  return db
-    .select({ seat: seats, buyerId: purchases.userId })
-    .from(seats)
-    .innerJoin(purchases, eq(seats.purchaseId, purchases.id))
-    .where(eq(seats.id, seatId))
-    .get();
-}
 
 /**
  * Whether `email` already holds an Invitation, or holds a claimed Seat, for
@@ -62,7 +51,7 @@ export function inviteToSeat(
   seatId: number,
   email: string
 ): SeatResult<{ seat: { id: number; code: string } }, InviteRefusal> {
-  const invitedEmail = email.trim().toLowerCase();
+  const invitedEmail = normaliseEmail(email);
   const found = getSeatWithBuyer(seatId);
   if (!found) return refuse("not-found");
   const { seat } = found;
@@ -122,18 +111,7 @@ export function withdrawInvitation(
     return refuse("paused");
   }
 
-  const withdrawn = db
-    .update(seats)
-    .set({ invitedEmail: null, invitedAt: null, code: newSeatCode() })
-    .where(
-      and(
-        eq(seats.id, seatId),
-        isNull(seats.claimedByUserId),
-        isNotNull(seats.invitedEmail)
-      )
-    )
-    .returning({ id: seats.id, code: seats.code })
-    .get();
+  const withdrawn = reopenInvitedSeat(seatId);
   if (!withdrawn) return refuse("not-invited");
 
   return { ok: true, seat: withdrawn };

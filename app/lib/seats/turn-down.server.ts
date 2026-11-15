@@ -1,16 +1,15 @@
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
-import { db } from "~/db";
-import { seats } from "~/db/schema";
-import { newSeatCode } from "./codes.server";
-import { getSeatByCode, invitationFor } from "./queries.server";
+import { getPurchaseStanding, getSeatByCode, invitationFor } from "./queries.server";
+import { reopenInvitedSeat } from "./reopen.server";
 import { refuse, type SeatResult } from "./result";
 
-export type TurnDownRefusal = "not-found" | "not-invitee";
+export type TurnDownRefusal = "not-found" | "not-invitee" | "paused";
 
 /**
  * The invitee refuses their Invitation. The Seat is open again with a new
  * code, so the Invitation's link stops working and the Buyer sees the Seat
- * as open. Only the invited user may Turn down.
+ * as open. Only the invited user may Turn down. Refused while a Refund
+ * Request is Requested: Invitations are paused, to resume unchanged if it is
+ * Declined.
  */
 export function turnDownInvitation(
   code: string,
@@ -24,23 +23,12 @@ export function turnDownInvitation(
   if (seat.claimedByUserId !== null || !invitation?.forViewer) {
     return refuse("not-invitee");
   }
+  if (getPurchaseStanding(seat.purchaseId) === "paused") {
+    return refuse("paused");
+  }
 
-  const turnedDown = db
-    .update(seats)
-    .set({ invitedEmail: null, invitedAt: null, code: newSeatCode() })
-    // The code must still be current, so a claim, withdrawal or Turn down
-    // made since this one began wins over it.
-    .where(
-      and(
-        eq(seats.id, seat.id),
-        eq(seats.code, code),
-        isNull(seats.claimedByUserId),
-        isNotNull(seats.invitedEmail)
-      )
-    )
-    .returning({ id: seats.id })
-    .get();
+  const turnedDown = reopenInvitedSeat(seat.id, { currentCode: code });
   if (!turnedDown) return refuse("not-found");
 
-  return { ok: true, seat: turnedDown };
+  return { ok: true, seat: { id: turnedDown.id } };
 }

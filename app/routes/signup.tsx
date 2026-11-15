@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Route } from "./+types/signup";
 import { UserRole, users } from "~/db/schema";
 import { setCurrentUserId, getCurrentUserId } from "~/lib/session";
-import { parseFormData } from "~/lib/validation";
+import { parseFormData, parsePrefillEmail } from "~/lib/validation";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
@@ -28,12 +28,6 @@ export function meta() {
   ];
 }
 
-// An email to fill in, such as the address an Invitation was sent to. A
-// malformed one is ignored rather than refused.
-const prefillSchema = z.object({
-  email: z.string().trim().toLowerCase().email().optional().catch(undefined),
-});
-
 export async function loader({ request, url }: Route.LoaderArgs) {
   const currentUserId = await getCurrentUserId(request);
   if (currentUserId) {
@@ -41,10 +35,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     const destination = redirectTo && redirectTo.startsWith("/") ? redirectTo : "/courses";
     throw redirect(destination);
   }
-  const { email } = prefillSchema.parse({
-    email: url.searchParams.get("email") ?? undefined,
-  });
-  return { prefillEmail: email ?? "" };
+  return { prefillEmail: parsePrefillEmail(url.searchParams) };
 }
 
 export async function action({ request, url }: Route.ActionArgs) {

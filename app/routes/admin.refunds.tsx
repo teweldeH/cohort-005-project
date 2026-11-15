@@ -432,7 +432,7 @@ export default function AdminRefunds({ loaderData }: Route.ComponentProps) {
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
                 {refundRequest.usage.kind === "team"
-                  ? `Team Purchase · ${refundRequest.usage.claimedSeats} of ${refundRequest.usage.seats} Seats claimed`
+                  ? `Team Purchase · ${refundRequest.usage.everClaimedSeats} of ${refundRequest.usage.seats} Seats ever claimed`
                   : `Own Purchase · ${refundRequest.usage.completedLessonCount} of ${refundRequest.usage.lessonCount} lessons completed · ${formatWatched(refundRequest.usage.secondsWatched)} watched`}{" "}
                 · purchased{" "}
                 {new Date(refundRequest.purchasedAt).toLocaleDateString()} ·

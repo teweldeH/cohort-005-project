@@ -23,7 +23,7 @@ export interface SeatProgress {
 }
 
 /**
- * The latest of a learner's lesson completions, video watches and quiz
+ * The latest of a Student's lesson completions, video watches and quiz
  * attempts in the given lessons. ISO dates compare as strings.
  */
 function getLastActive(userId: number, lessonIds: number[]) {

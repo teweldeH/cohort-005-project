@@ -2,9 +2,9 @@ import { and, eq } from "drizzle-orm";
 import { db } from "~/db";
 import { enrollments, seatReleases, seats } from "~/db/schema";
 import { checkOwnPurchaseLimits } from "~/lib/refunds";
-import { getLearning, isEnrollmentGivenElsewhere } from "~/lib/refunds.server";
+import { getCourseUsage, isEnrollmentGivenElsewhere } from "~/lib/refunds.server";
 import { newSeatCode } from "./codes.server";
-import { getSeatWithBuyer } from "./invitations.server";
+import { getSeatWithBuyer } from "./queries.server";
 import { refuse, type SeatResult } from "./result";
 
 export type ReleaseRefusal =
@@ -15,10 +15,10 @@ export type ReleaseRefusal =
 
 /**
  * Whether a Seat's holder is within the Release limit: the Own Purchase
- * limits, counting all their learning in the course, whatever gave it.
+ * limits, counting all their use of the course, whatever gave it.
  */
 export function isWithinReleaseLimit(holderId: number, courseId: number) {
-  return checkOwnPurchaseLimits(getLearning(holderId, courseId)).within;
+  return checkOwnPurchaseLimits(getCourseUsage(holderId, courseId)).within;
 }
 
 /**
@@ -55,8 +55,8 @@ export function releaseSeat(
       .values({ seatId, formerHolderUserId: holderId })
       .run();
 
-    const learner = { userId: holderId, courseId: seat.courseId };
-    if (!isEnrollmentGivenElsewhere(tx, learner)) {
+    const student = { userId: holderId, courseId: seat.courseId };
+    if (!isEnrollmentGivenElsewhere(tx, student, null)) {
       tx.delete(enrollments)
         .where(
           and(

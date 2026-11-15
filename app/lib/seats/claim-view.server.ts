@@ -51,20 +51,19 @@ function getBuyerName(buyerId: number) {
   return buyer?.name ?? "the Buyer";
 }
 
-export type ClaimViewRefusal = "not-found" | "signed-out";
+export type ClaimViewRefusal = "not-found";
 
 /**
- * What the claim page needs to show a viewer for a Seat code. An unknown code
- * (including one replaced when an Invitation was made or withdrawn) is
- * reported before asking a signed-out visitor to sign in.
+ * What the claim page needs to show a signed-in viewer for a Seat code. An
+ * unknown code (including one replaced when an Invitation was made or
+ * withdrawn) is refused. A signed-out visitor gets `getClaimSignIn` instead.
  */
 export function getClaimView(
   code: string,
-  viewer: ClaimViewer | null
+  viewer: ClaimViewer
 ): SeatResult<{ view: ClaimView }, ClaimViewRefusal> {
   const found = getSeatByCode(code);
   if (!found) return refuse("not-found");
-  if (!viewer) return refuse("signed-out");
   const { seat, course, purchase } = found;
 
   const alreadyClaimed = seat.claimedByUserId !== null;

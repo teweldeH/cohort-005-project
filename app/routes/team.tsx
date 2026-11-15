@@ -13,7 +13,7 @@ import {
 } from "~/components/request-refund";
 import { cn, formatPrice, formatRelativeTime } from "~/lib/utils";
 import { parseFormData } from "~/lib/validation";
-import { SeatProgressBar, formatLastActive } from "~/components/seat-progress";
+import { SeatProgressBar } from "~/components/seat-progress";
 import {
   getTeamRoster,
   inviteToSeat,
@@ -56,10 +56,10 @@ const seatActionSchema = z.discriminatedUnion("intent", [
   z.object({
     intent: z.literal("invite"),
     seatId: z.coerce.number().int().positive(),
+    // The Seat module normalises the address it stores.
     email: z
       .string()
       .trim()
-      .toLowerCase()
       .email("Enter the email address of the person to invite."),
   }),
   z.object({
@@ -72,7 +72,16 @@ const seatActionSchema = z.discriminatedUnion("intent", [
   }),
 ]);
 
-const NOT_BUYER = "Only the Buyer can manage this Seat.";
+// Refusals more than one Seat action shares.
+const SEAT_NOT_FOUND = { message: "Seat not found.", status: 404 };
+const NOT_BUYER = {
+  message: "Only the Buyer can manage this Seat.",
+  status: 403,
+};
+const INVITATIONS_PAUSED = {
+  message: "Invitations are paused while your Refund Request is reviewed.",
+  status: 409,
+};
 
 /**
  * Why an Invitation was refused. The Buyer can fix the ones marked
@@ -82,18 +91,14 @@ const INVITE_REFUSALS: Record<
   InviteRefusal,
   { message: string; status: number; correctable: boolean }
 > = {
-  "not-found": { message: "Seat not found.", status: 404, correctable: false },
-  "not-buyer": { message: NOT_BUYER, status: 403, correctable: false },
+  "not-found": { ...SEAT_NOT_FOUND, correctable: false },
+  "not-buyer": { ...NOT_BUYER, correctable: false },
   "not-open": {
     message: "This Seat is no longer open.",
     status: 409,
     correctable: true,
   },
-  paused: {
-    message: "Invitations are paused while your Refund Request is reviewed.",
-    status: 409,
-    correctable: true,
-  },
+  paused: { ...INVITATIONS_PAUSED, correctable: true },
   refunded: {
     message: "This purchase was refunded, so its Seats can't be offered.",
     status: 410,
@@ -111,12 +116,9 @@ const WITHDRAW_REFUSALS: Record<
   WithdrawRefusal,
   { message: string; status: number }
 > = {
-  "not-found": { message: "Seat not found.", status: 404 },
-  "not-buyer": { message: NOT_BUYER, status: 403 },
-  paused: {
-    message: "Invitations are paused while your Refund Request is reviewed.",
-    status: 409,
-  },
+  "not-found": SEAT_NOT_FOUND,
+  "not-buyer": NOT_BUYER,
+  paused: INVITATIONS_PAUSED,
   "not-invited": {
     message: "This Seat has no Invitation to withdraw.",
     status: 409,
@@ -127,8 +129,8 @@ const RELEASE_REFUSALS: Record<
   ReleaseRefusal,
   { message: string; status: number }
 > = {
-  "not-found": { message: "Seat not found.", status: 404 },
-  "not-buyer": { message: NOT_BUYER, status: 403 },
+  "not-found": SEAT_NOT_FOUND,
+  "not-buyer": NOT_BUYER,
   "not-claimed": {
     message: "Nobody holds this Seat, so there's nothing to Release.",
     status: 409,
@@ -512,7 +514,9 @@ function PurchaseSection({ purchase }: { purchase: RosterPurchase }) {
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {seat.status === "claimed" &&
-                    formatLastActive(seat.progress.lastActive)}
+                    (seat.progress.lastActive
+                      ? formatRelativeTime(seat.progress.lastActive)
+                      : "Never")}
                 </td>
                 <td className="px-4 py-3">
                   <SeatActions seat={seat} banner={purchase.banner} />

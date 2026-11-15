@@ -1,5 +1,5 @@
 import { data } from "react-router";
-import type { z } from "zod";
+import { z } from "zod";
 
 type ParseSuccess<T> = { success: true; data: T };
 type ParseFailure = {
@@ -75,4 +75,21 @@ export async function parseJsonBody<T extends z.ZodType>(
   }
 
   return { success: false, errors };
+}
+
+// An email to fill in, such as the address an Invitation was sent to. A
+// malformed one is ignored rather than refused.
+const prefillEmailSchema = z.object({
+  email: z.string().trim().toLowerCase().email().optional().catch(undefined),
+});
+
+/**
+ * The `?email=` search parameter to fill in on the login and sign-up forms,
+ * or "" when it is missing or malformed.
+ */
+export function parsePrefillEmail(searchParams: URLSearchParams): string {
+  const { email } = prefillEmailSchema.parse({
+    email: searchParams.get("email") ?? undefined,
+  });
+  return email ?? "";
 }

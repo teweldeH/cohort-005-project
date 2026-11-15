@@ -16,7 +16,7 @@ import {
 import {
   checkRefundEligibility,
   isTeamPurchase,
-  type Learning,
+  type CourseUsage,
   type RefundDecisionOutcome,
 } from "~/lib/refunds";
 import { withdrawInvitationsOnRefund } from "~/lib/seats/refund-approval.server";
@@ -136,14 +136,14 @@ export function getUsage(purchaseId: number, buyerId: number, courseId: number) 
     return { kind: "team" as const, ...seatCounts };
   }
 
-  return { kind: "own" as const, ...getLearning(buyerId, courseId) };
+  return { kind: "own" as const, ...getCourseUsage(buyerId, courseId) };
 }
 
 /**
- * How much of a course a learner has taken, as the Own Purchase limits
+ * How much of a course a Student has used, as the Own Purchase limits
  * measure it.
  */
-export function getLearning(userId: number, courseId: number): Learning {
+export function getCourseUsage(userId: number, courseId: number): CourseUsage {
   const lessonIds = getLessonIdsForCourse(courseId);
 
   return {
@@ -156,22 +156,22 @@ export function getLearning(userId: number, courseId: number): Learning {
 export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
- * Whether a learner's Enrollment in a course is still given by something:
+ * Whether a Student's Enrollment in a course is still given by something:
  * a Seat they hold, or an Own Purchase not refunded. `exceptPurchaseId` is
- * the purchase being refunded, which no longer counts.
+ * the purchase being refunded, which no longer counts, or null when none is.
  */
 export function isEnrollmentGivenElsewhere(
   tx: Transaction,
-  learner: { userId: number; courseId: number },
-  exceptPurchaseId: number | null = null
+  student: { userId: number; courseId: number },
+  exceptPurchaseId: number | null
 ) {
   const claimedSeat = tx
     .select({ id: seats.id })
     .from(seats)
     .where(
       and(
-        eq(seats.claimedByUserId, learner.userId),
-        eq(seats.courseId, learner.courseId)
+        eq(seats.claimedByUserId, student.userId),
+        eq(seats.courseId, student.courseId)
       )
     )
     .get();
@@ -183,8 +183,8 @@ export function isEnrollmentGivenElsewhere(
     .from(purchases)
     .where(
       and(
-        eq(purchases.userId, learner.userId),
-        eq(purchases.courseId, learner.courseId),
+        eq(purchases.userId, student.userId),
+        eq(purchases.courseId, student.courseId),
         exceptPurchaseId === null
           ? undefined
           : ne(purchases.id, exceptPurchaseId),

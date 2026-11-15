@@ -5,11 +5,11 @@ type TestDb = ReturnType<typeof createTestDb>;
 type BaseData = ReturnType<typeof seedBaseData>;
 
 /**
- * Builders for a learner's Progress in the Seat management tests: lessons on
+ * Builders for a Student's Progress in the Seat management tests: lessons on
  * a course, and the lesson completions, video watches and quiz attempts that
  * count as being active.
  */
-export function learningFixtures(db: TestDb, base: BaseData) {
+export function progressFixtures(db: TestDb, base: BaseData) {
   /** `count` lessons in one module of the course. */
   function addLessons(count: number, courseId = base.course.id) {
     const module = db

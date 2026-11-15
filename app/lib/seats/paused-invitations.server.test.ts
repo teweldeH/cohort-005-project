@@ -10,6 +10,7 @@ import {
   getClaimView,
   getTeamRoster,
   inviteToSeat,
+  turnDownInvitation,
   withdrawInvitation,
 } from "./index.server";
 import { seatFixtures } from "./test-fixtures";
@@ -124,6 +125,29 @@ describe("Approving the Refund Request", () => {
 });
 
 describe("Declining the Refund Request", () => {
+  it("resumes an Invitation the invitee tried to Turn down while paused", () => {
+    const { invitee, purchase, code, request } = pausedPurchaseWithInvitation();
+
+    expect(turnDownInvitation(code, invitee.id)).toEqual({
+      ok: false,
+      reason: "paused",
+    });
+
+    decideRefundRequest(
+      request.id,
+      purchase,
+      { outcome: "decline", note: "Seats were used" },
+      base.instructor.id
+    );
+
+    expect(rosterSeats()[0]).toMatchObject({
+      status: "invited",
+      code,
+      invitedEmail: "ivy@example.com",
+    });
+  });
+
+
   it("resumes its Invitations unchanged: the invitee claims with the same link", () => {
     const { invitee, purchase, code, request } = pausedPurchaseWithInvitation();
 
