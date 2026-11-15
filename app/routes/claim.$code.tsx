@@ -1,4 +1,10 @@
-import { Link, useFetcher, redirect, isRouteErrorResponse } from "react-router";
+import {
+  Link,
+  useFetcher,
+  redirect,
+  isRouteErrorResponse,
+  type ShouldRevalidateFunctionArgs,
+} from "react-router";
 import { z } from "zod";
 import type { Route } from "./+types/claim.$code";
 import { getCurrentUserId } from "~/lib/session";
@@ -6,103 +12,71 @@ import { resolveCountry } from "~/lib/country.server";
 import { parseParams, parseFormData } from "~/lib/validation";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { Ticket, AlertCircle, CheckCircle2, Globe } from "lucide-react";
+import { Ticket, AlertCircle, CheckCircle2, Globe, Mail } from "lucide-react";
 import { data } from "react-router";
-import { db } from "~/db";
 import {
-  purchases,
-  seats,
-  courses,
-  enrollments,
-  RefundRequestStatus,
-} from "~/db/schema";
-import { eq, and } from "drizzle-orm";
-import { getRefundRequestStatus } from "~/lib/refunds.server";
+  claimSeat,
+  getClaimSignIn,
+  getClaimView,
+  turnDownInvitation,
+  type ClaimRefusal,
+  type TurnDownRefusal,
+} from "~/lib/seats/index.server";
 
 const SEAT_ON_HOLD_MESSAGE =
   "This seat can't be claimed right now. Please ask the person who shared this link.";
 const SEAT_REFUNDED_MESSAGE =
   "This seat is no longer available. Please ask the person who shared this link.";
+// A code stops existing when an Invitation is made or withdrawn, and there is
+// no telling that apart from a mistyped one.
+const NO_LONGER_AVAILABLE_MESSAGE =
+  "This Invitation is no longer available. Please ask the person who shared this link for a new one.";
+const DIFFERENT_ADDRESS_MESSAGE =
+  "This Invitation is for a different address. Log in with the email it was sent to.";
 
-function getCourseById(id: number) {
-  return db.select().from(courses).where(eq(courses.id, id)).get();
-}
+/** Why a claim was refused, as the claim page reports it. */
+const CLAIM_REFUSALS: Record<ClaimRefusal, { message: string; status: number }> =
+  {
+    "not-found": { message: NO_LONGER_AVAILABLE_MESSAGE, status: 404 },
+    "already-claimed": {
+      message: "This seat has already been claimed.",
+      status: 409,
+    },
+    paused: { message: SEAT_ON_HOLD_MESSAGE, status: 409 },
+    refunded: { message: SEAT_REFUNDED_MESSAGE, status: 410 },
+    "not-invited-email": { message: DIFFERENT_ADDRESS_MESSAGE, status: 403 },
+    "already-enrolled": {
+      message: "You are already enrolled in this course.",
+      status: 409,
+    },
+    "country-mismatch": {
+      message:
+        "This seat can only be claimed from the same country as the buyer.",
+      status: 403,
+    },
+  };
 
-function getSeatByCode(code: string) {
-  return db.select().from(seats).where(eq(seats.code, code)).get();
-}
-
-function isUserEnrolled(userId: number, courseId: number) {
-  const existing = db
-    .select()
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
-
-  return !!existing;
-}
-
-function getPurchaseById(id: number) {
-  return db.select().from(purchases).where(eq(purchases.id, id)).get();
-}
-
-/** Claims a Seat for a user, giving them an Enrollment, or throws why not. */
-function claimSeat(code: string, userId: number, userCountry: string) {
-  const seat = getSeatByCode(code);
-  if (!seat) {
-    throw data("Seat not found.", { status: 404 });
-  }
-
-  if (seat.claimedByUserId !== null) {
-    throw data("This seat has already been claimed.", { status: 409 });
-  }
-
-  // A claimed Seat rules out a Refund, so no Seat is claimed while the Buyer
-  // is waiting on one, and a refunded purchase's Seats are gone for good.
-  const refundRequestStatus = getRefundRequestStatus(seat.purchaseId);
-  if (refundRequestStatus === RefundRequestStatus.Requested) {
-    throw data(SEAT_ON_HOLD_MESSAGE, { status: 409 });
-  }
-  if (refundRequestStatus === RefundRequestStatus.Approved) {
-    throw data(SEAT_REFUNDED_MESSAGE, { status: 410 });
-  }
-
-  if (isUserEnrolled(userId, seat.courseId)) {
-    throw data("You are already enrolled in this course.", { status: 409 });
-  }
-
-  const purchase = getPurchaseById(seat.purchaseId);
-  if (purchase?.country && purchase.country !== userCountry) {
-    throw data(
-      "This seat can only be claimed from the same country as the buyer.",
-      { status: 403 }
-    );
-  }
-
-  db.update(seats)
-    .set({
-      claimedByUserId: userId,
-      claimedAt: new Date().toISOString(),
-    })
-    .where(eq(seats.id, seat.id))
-    .run();
-
-  return db
-    .insert(enrollments)
-    .values({ userId, courseId: seat.courseId })
-    .returning()
-    .get();
-}
+/** Why a Turn down was refused, as the claim page reports it. */
+const TURN_DOWN_REFUSALS: Record<
+  TurnDownRefusal,
+  { message: string; status: number }
+> = {
+  "not-found": { message: NO_LONGER_AVAILABLE_MESSAGE, status: 404 },
+  "not-invitee": {
+    message: "Only the person this Invitation is for can Turn it down.",
+    status: 403,
+  },
+  paused: { message: SEAT_ON_HOLD_MESSAGE, status: 409 },
+};
 
 const claimParamsSchema = z.object({
   code: z.string().min(1),
 });
 
-const claimActionSchema = z.object({
-  intent: z.literal("confirm-claim"),
-});
+const claimActionSchema = z.discriminatedUnion("intent", [
+  z.object({ intent: z.literal("confirm-claim") }),
+  z.object({ intent: z.literal("turn-down") }),
+]);
 
 export function meta({ loaderData }: Route.MetaArgs) {
   const title = loaderData?.course?.title ?? "Claim a Seat";
@@ -115,50 +89,24 @@ export function meta({ loaderData }: Route.MetaArgs) {
 export async function loader({ params, request }: Route.LoaderArgs) {
   const { code } = parseParams(params, claimParamsSchema);
 
-  const seat = getSeatByCode(code);
-  if (!seat) {
-    throw data("Seat not found.", { status: 404 });
-  }
-
   const currentUserId = await getCurrentUserId(request);
-  if (!currentUserId) {
-    throw redirect(
-      `/login?redirectTo=${encodeURIComponent(`/claim/${code}`)}`
-    );
+  const viewer = currentUserId
+    ? { userId: currentUserId, country: await resolveCountry(request) }
+    : null;
+
+  if (!viewer) {
+    const signIn = getClaimSignIn(code);
+    if (!signIn.ok) throw data(NO_LONGER_AVAILABLE_MESSAGE, { status: 404 });
+    // Log in, or sign up with the invited email filled in, then come back.
+    const query = new URLSearchParams({ redirectTo: `/claim/${code}` });
+    if (signIn.invitedEmail) query.set("email", signIn.invitedEmail);
+    throw redirect(`/login?${query}`);
   }
 
-  const course = getCourseById(seat.courseId);
-  if (!course) {
-    throw data("Course not found.", { status: 404 });
-  }
+  const result = getClaimView(code, viewer);
+  if (!result.ok) throw data(NO_LONGER_AVAILABLE_MESSAGE, { status: 404 });
 
-  const alreadyClaimed = seat.claimedByUserId !== null;
-  const alreadyEnrolled = isUserEnrolled(currentUserId, seat.courseId);
-  const refundRequestStatus = alreadyClaimed
-    ? null
-    : getRefundRequestStatus(seat.purchaseId);
-  const onHold = refundRequestStatus === RefundRequestStatus.Requested;
-  const refunded = refundRequestStatus === RefundRequestStatus.Approved;
-
-  // Check country mismatch upfront so we can show a clear message
-  let countryMismatch = false;
-  if (!alreadyClaimed && !alreadyEnrolled) {
-    const userCountry = await resolveCountry(request);
-    const purchase = getPurchaseById(seat.purchaseId);
-    if (purchase?.country && purchase.country !== (userCountry ?? "")) {
-      countryMismatch = true;
-    }
-  }
-
-  return {
-    course: { id: course.id, title: course.title, slug: course.slug },
-    code,
-    alreadyClaimed,
-    alreadyEnrolled,
-    onHold,
-    refunded,
-    countryMismatch,
-  };
+  return result.view;
 }
 
 export async function action({ params, request }: Route.ActionArgs) {
@@ -176,35 +124,100 @@ export async function action({ params, request }: Route.ActionArgs) {
     throw data("Invalid action.", { status: 400 });
   }
 
-  const userCountry = await resolveCountry(request);
-  const enrollment = claimSeat(code, currentUserId, userCountry ?? "");
-
-  const course = getCourseById(enrollment.courseId);
-  if (!course) {
-    throw redirect("/courses");
+  if (parsed.data.intent === "turn-down") {
+    const turnedDown = turnDownInvitation(code, currentUserId);
+    if (!turnedDown.ok) {
+      const { message, status } = TURN_DOWN_REFUSALS[turnedDown.reason];
+      throw data(message, { status });
+    }
+    return { turnedDown: true };
   }
 
-  throw redirect(`/courses/${course.slug}/welcome`);
+  const userCountry = await resolveCountry(request);
+  const result = claimSeat(code, currentUserId, userCountry);
+  if (!result.ok) {
+    const { message, status } = CLAIM_REFUSALS[result.reason];
+    throw data(message, { status });
+  }
+
+  throw redirect(`/courses/${result.course.slug}/welcome`);
+}
+
+/**
+ * After a Turn down the Seat's code no longer exists, so reloading the claim
+ * page would only say the Invitation is gone. Keep the page and say what
+ * happened instead.
+ */
+export function shouldRevalidate({
+  actionResult,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (actionResult?.turnedDown) return false;
+  return defaultShouldRevalidate;
 }
 
 export default function Claim({ loaderData }: Route.ComponentProps) {
   const {
     course,
     code,
+    invitation,
+    buyerName,
     alreadyClaimed,
     alreadyEnrolled,
-    onHold,
+    paused,
     refunded,
     countryMismatch,
+    buyerCountry,
   } = loaderData;
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<typeof action>();
   const isSubmitting = fetcher.state !== "idle";
+
+  const forSomeoneElse = invitation !== null && !invitation.forViewer;
+  const forViewer = invitation !== null && invitation.forViewer;
+
+  if (fetcher.data?.turnedDown) {
+    return (
+      <div className="mx-auto max-w-2xl p-6 lg:p-8">
+        <h1 className="mb-8 text-2xl font-bold">Invitation turned down</h1>
+        <Card>
+          <CardContent className="p-8 text-center">
+            <h2 className="mb-2 text-xl font-semibold">{course.title}</h2>
+            <p className="text-sm text-muted-foreground">
+              You turned down this Invitation. The Seat has gone back to{" "}
+              {buyerName}, and this link no longer works.
+            </p>
+            <div className="mt-6">
+              <Link
+                to="/courses"
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Browse courses
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Only the invitee may Turn down, and only while they could claim or are
+  // told why they can't. While the purchase is paused the Seat is on hold,
+  // so there is nothing to Turn down.
+  const turnDown = forViewer && !paused ? (
+    <fetcher.Form method="post" className="mt-4">
+      <input type="hidden" name="intent" value="turn-down" />
+      <Button variant="outline" disabled={isSubmitting}>
+        Turn down
+      </Button>
+    </fetcher.Form>
+  ) : null;
 
   // Determine which state to show
   const canClaim =
+    !forSomeoneElse &&
     !alreadyClaimed &&
     !alreadyEnrolled &&
-    !onHold &&
+    !paused &&
     !refunded &&
     !countryMismatch;
 
@@ -250,7 +263,39 @@ export default function Claim({ loaderData }: Route.ComponentProps) {
                 {SEAT_REFUNDED_MESSAGE}
               </p>
             </div>
-          ) : alreadyEnrolled ? (
+          ) : forSomeoneElse ? (
+            <div className="rounded-lg bg-amber-50 p-4 dark:bg-amber-900/20">
+              <div className="flex items-center justify-center gap-2 text-amber-700 dark:text-amber-400">
+                <Mail className="size-5" />
+                <span className="font-medium">
+                  This Invitation is for a different address
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Log in with the email address this Invitation was sent to.
+              </p>
+            </div>
+          ) : alreadyEnrolled && forViewer && !paused ? (
+            <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
+              <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
+                <CheckCircle2 className="size-5" />
+                <span className="font-medium">
+                  You already have this course
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                You don&apos;t need this Seat. Turn down the Invitation so{" "}
+                {buyerName} can give it to someone else.
+              </p>
+              {turnDown}
+              <Link
+                to={`/courses/${course.slug}`}
+                className="mt-4 inline-block text-sm font-medium text-primary hover:underline"
+              >
+                Go to Course
+              </Link>
+            </div>
+          ) : alreadyEnrolled && !forViewer ? (
             <div className="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
               <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
                 <CheckCircle2 className="size-5" />
@@ -268,7 +313,7 @@ export default function Claim({ loaderData }: Route.ComponentProps) {
                 </Button>
               </Link>
             </div>
-          ) : onHold ? (
+          ) : paused ? (
             <div className="rounded-lg bg-amber-50 p-4 dark:bg-amber-900/20">
               <div className="flex items-center justify-center gap-2 text-amber-700 dark:text-amber-400">
                 <AlertCircle className="size-5" />
@@ -285,14 +330,19 @@ export default function Claim({ loaderData }: Route.ComponentProps) {
                 <span className="font-medium">Region restriction</span>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                This seat can only be claimed from the same country as the
-                buyer. Your location doesn&apos;t match the buyer&apos;s
-                country.
+                This Seat can only be claimed from the country it was bought
+                in{buyerCountry ? ` (${buyerCountry})` : ""}, and you appear to
+                be somewhere else. If you&apos;re away, claim it once
+                you&apos;re back.
               </p>
+              {turnDown}
             </div>
           ) : (
             <fetcher.Form method="post">
               <input type="hidden" name="intent" value="confirm-claim" />
+              <p className="mb-4 text-sm text-muted-foreground">
+                Your progress on this course will be visible to {buyerName}.
+              </p>
               <Button
                 size="lg"
                 className="w-full max-w-sm"
@@ -302,6 +352,7 @@ export default function Claim({ loaderData }: Route.ComponentProps) {
               </Button>
             </fetcher.Form>
           )}
+          {canClaim && turnDown}
 
           <div className="mt-6">
             <Link

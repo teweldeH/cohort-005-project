@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Route } from "./+types/signup";
 import { UserRole, users } from "~/db/schema";
 import { setCurrentUserId, getCurrentUserId } from "~/lib/session";
-import { parseFormData } from "~/lib/validation";
+import { parseFormData, parsePrefillEmail } from "~/lib/validation";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
@@ -35,7 +35,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     const destination = redirectTo && redirectTo.startsWith("/") ? redirectTo : "/courses";
     throw redirect(destination);
   }
-  return {};
+  return { prefillEmail: parsePrefillEmail(url.searchParams) };
 }
 
 export async function action({ request, url }: Route.ActionArgs) {
@@ -85,7 +85,7 @@ export async function action({ request, url }: Route.ActionArgs) {
   });
 }
 
-export default function SignUp() {
+export default function SignUp({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -142,7 +142,7 @@ export default function SignUp() {
                   name="email"
                   type="email"
                   placeholder="you@example.com"
-                  defaultValue={actionData?.values?.email ?? ""}
+                  defaultValue={actionData?.values?.email ?? loaderData.prefillEmail}
                   aria-invalid={!!actionData?.errors?.email}
                 />
                 {actionData?.errors?.email && (

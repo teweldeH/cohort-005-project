@@ -72,6 +72,7 @@ async function seed() {
     DROP TABLE IF EXISTS quiz_questions;
     DROP TABLE IF EXISTS quizzes;
     DROP TABLE IF EXISTS lesson_progress;
+    DROP TABLE IF EXISTS seat_releases;
     DROP TABLE IF EXISTS seats;
     DROP TABLE IF EXISTS coupons;
     DROP TABLE IF EXISTS team_members;
@@ -2348,6 +2349,26 @@ This course is still in draft while the cluster examples are rewritten against t
     .where(eq(schema.seats.id, seededSeats[1].id))
     .run();
 
+  // Offer the last Seat to Sophia as an Invitation she hasn't claimed yet.
+  db.update(schema.seats)
+    .set({
+      invitedEmail: "sophia.davis@student.dev",
+      invitedAt: daysAgo(3),
+    })
+    .where(eq(schema.seats.id, seededSeats[4].id))
+    .run();
+
+  // Mia claimed the fourth Seat, then Bossy Released it. The Seat is open
+  // again (its code is the new one the Release gave it), Mia has no
+  // Enrollment, and the Release keeps the purchase from ever being refunded.
+  db.insert(schema.seatReleases)
+    .values({
+      seatId: seededSeats[3].id,
+      formerHolderUserId: studentByEmail("mia.lindqvist@student.dev").id,
+      releasedAt: daysAgo(10),
+    })
+    .run();
+
   console.log(
     `Created 1 team with Bossy McBossface as Buyer, 1 team purchase, and ${seededSeats.length} Seats (${countRows(schema.seats, isNotNull(schema.seats.claimedByUserId))} claimed, ${countRows(schema.seats, isNull(schema.seats.claimedByUserId))} available).`
   );
@@ -2809,7 +2830,7 @@ This course is still in draft while the cluster examples are rewritten against t
     `  Purchases: ${countRows(schema.purchases)} (${countRows(schema.purchases, gte(schema.purchases.createdAt, sevenDaysAgo))} in the last 7 days), spanning ${historyDays} days`
   );
   console.log(
-    `  Teams: ${countRows(schema.teams)}, Seats: ${countRows(schema.seats)} (${countRows(schema.seats, isNotNull(schema.seats.claimedByUserId))} claimed)`
+    `  Teams: ${countRows(schema.teams)}, Seats: ${countRows(schema.seats)} (${countRows(schema.seats, isNotNull(schema.seats.claimedByUserId))} claimed), Seat Releases: ${countRows(schema.seatReleases)}`
   );
 }
 

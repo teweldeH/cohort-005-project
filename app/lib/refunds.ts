@@ -34,10 +34,44 @@ export const REFUND_WINDOW_DAYS = 14;
 export const REFUND_WATCH_LIMIT_SECONDS = 2 * 60 * 60;
 export const REFUND_COMPLETION_LIMIT = 0.5;
 
+/** How much of a course a Student has used: lessons completed and time watched. */
+export type CourseUsage = {
+  lessonCount: number;
+  completedLessonCount: number;
+  secondsWatched: number;
+};
+
+export type OwnPurchaseLimitsCheck =
+  | { within: true }
+  | { within: false; reason: "too-much-completed" | "too-much-watched" };
+
+/**
+ * Whether a Student is within the Own Purchase limits: under half the
+ * course's lessons completed and under 2 hours watched. Refund Eligibility
+ * holds an Own Purchase's Buyer to them, and a Release its Seat holder.
+ */
+export function checkOwnPurchaseLimits(
+  usage: CourseUsage
+): OwnPurchaseLimitsCheck {
+  if (
+    usage.lessonCount > 0 &&
+    usage.completedLessonCount / usage.lessonCount >=
+      REFUND_COMPLETION_LIMIT
+  ) {
+    return { within: false, reason: "too-much-completed" };
+  }
+
+  if (usage.secondsWatched >= REFUND_WATCH_LIMIT_SECONDS) {
+    return { within: false, reason: "too-much-watched" };
+  }
+
+  return { within: true };
+}
+
 /**
  * What is known about a purchase when checking Refund Eligibility. How much
  * of it has been used depends on what was bought: an Own Purchase is used by
- * its Buyer's learning, a Team Purchase by its Seats being claimed.
+ * its Buyer's own use of the course, a Team Purchase by its Seats being claimed.
  */
 export type RefundEligibilityFacts = {
   purchasedAt: string;
@@ -46,13 +80,14 @@ export type RefundEligibilityFacts = {
   // while it is open, and once decided the decision stands.
   refundRequestStatus: RefundRequestStatus | null;
   usage:
+    | ({ kind: "own" } & CourseUsage)
     | {
-        kind: "own";
-        lessonCount: number;
-        completedLessonCount: number;
-        secondsWatched: number;
-      }
-    | { kind: "team"; seats: number; claimedSeats: number };
+        kind: "team";
+        seats: number;
+        claimedSeats: number;
+        // Claimed now, or claimed once and since Released.
+        everClaimedSeats: number;
+      };
 };
 
 export type RefundIneligibleReason =
@@ -109,24 +144,16 @@ export function checkRefundEligibility(
 
   if (usage.kind === "team") {
     // A purchase is refunded whole or not at all, so one claimed Seat rules
-    // out the Refund. Nobody learns from an unclaimed Seat, so the Buyer's
-    // own learning doesn't count here.
-    if (usage.claimedSeats > 0) {
+    // out the Refund, and a Release never brings it back. Nobody learns from
+    // an unclaimed Seat, so the Buyer's own use of the course doesn't count here.
+    if (usage.everClaimedSeats > 0) {
       return { eligible: false, reason: "seat-claimed" };
     }
     return { eligible: true, lastDayInWindow };
   }
 
-  if (
-    usage.lessonCount > 0 &&
-    usage.completedLessonCount / usage.lessonCount >= REFUND_COMPLETION_LIMIT
-  ) {
-    return { eligible: false, reason: "too-much-completed" };
-  }
-
-  if (usage.secondsWatched >= REFUND_WATCH_LIMIT_SECONDS) {
-    return { eligible: false, reason: "too-much-watched" };
-  }
+  const limits = checkOwnPurchaseLimits(usage);
+  if (!limits.within) return { eligible: false, reason: limits.reason };
 
   return { eligible: true, lastDayInWindow };
 }

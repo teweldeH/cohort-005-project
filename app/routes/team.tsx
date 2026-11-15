@@ -1,84 +1,32 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useFetcher } from "react-router";
+import { z } from "zod";
 import type { Route } from "./+types/team";
 import { getCurrentUserId } from "~/lib/session";
-import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { Users, BookOpen, Copy, Check, AlertTriangle } from "lucide-react";
+import { Copy, Check, AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse } from "react-router";
-import { db } from "~/db";
-import {
-  seats,
-  courses,
-  purchases,
-  users,
-  RefundRequestStatus,
-} from "~/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { RefundRequestStatus } from "~/db/schema";
 import {
   RefundRequestDeclined,
   RequestRefund,
 } from "~/components/request-refund";
+import { cn, formatPrice, formatRelativeTime } from "~/lib/utils";
+import { parseFormData } from "~/lib/validation";
+import { SeatProgressBar } from "~/components/seat-progress";
 import {
-  getRefundEligibility,
-  getRefundRequestStatus,
-} from "~/lib/refunds.server";
-import { formatPrice } from "~/lib/utils";
-import { getTeamForBuyer } from "~/lib/teams.server";
-
-function getSeatsForTeam(teamId: number) {
-  return db.select().from(seats).where(eq(seats.teamId, teamId)).all();
-}
-
-function getCourseById(id: number) {
-  return db.select().from(courses).where(eq(courses.id, id)).get();
-}
-
-function getUserById(id: number) {
-  return db.select().from(users).where(eq(users.id, id)).get();
-}
-
-function getBuyerPurchases(buyerId: number, purchaseIds: number[]) {
-  if (purchaseIds.length === 0) return [];
-
-  return db
-    .select()
-    .from(purchases)
-    .where(
-      and(eq(purchases.userId, buyerId), inArray(purchases.id, purchaseIds))
-    )
-    .all();
-}
-
-interface CourseStats {
-  courseId: number;
-  courseTitle: string;
-  courseSlug: string;
-  totalSeats: number;
-  claimedSeats: number;
-}
-
-interface TeamPurchaseRow {
-  purchaseId: number;
-  courseTitle: string;
-  courseSlug: string;
-  purchasedAt: string;
-  amount: number;
-  totalSeats: number;
-  claimedSeats: number;
-  canRequestRefund: boolean;
-  refundRequestStatus: RefundRequestStatus | null;
-}
-
-interface SeatRow {
-  id: number;
-  code: string;
-  courseId: number;
-  courseTitle: string;
-  claimedByEmail: string | null;
-  refunded: boolean;
-  createdAt: string;
-}
+  getTeamRoster,
+  inviteToSeat,
+  releaseSeat,
+  withdrawInvitation,
+  type InviteRefusal,
+  type ReleaseRefusal,
+  type WithdrawRefusal,
+  type RosterBanner,
+  type RosterPurchase,
+  type RosterSeat,
+  type RosterSeatStatus,
+} from "~/lib/seats/index.server";
 
 export function meta() {
   return [
@@ -94,116 +42,149 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("Select a user from the DevUI panel.", { status: 401 });
   }
 
-  const team = getTeamForBuyer(currentUserId);
-
-  if (!team) {
+  const result = getTeamRoster(currentUserId);
+  if (!result.ok) {
     throw data("You don't have a team. Purchase team seats to create one.", {
       status: 403,
     });
   }
 
-  const allSeats = getSeatsForTeam(team.id);
-
-  // Build per-course stats
-  const courseMap = new Map<
-    number,
-    {
-      courseId: number;
-      courseTitle: string;
-      courseSlug: string;
-      total: number;
-      claimed: number;
-    }
-  >();
-
-  for (const seat of allSeats) {
-    let entry = courseMap.get(seat.courseId);
-    if (!entry) {
-      const course = getCourseById(seat.courseId);
-      entry = {
-        courseId: seat.courseId,
-        courseTitle: course?.title ?? "Unknown Course",
-        courseSlug: course?.slug ?? "",
-        total: 0,
-        claimed: 0,
-      };
-      courseMap.set(seat.courseId, entry);
-    }
-    entry.total++;
-    if (seat.claimedByUserId !== null) {
-      entry.claimed++;
-    }
-  }
-
-  const courseStats: CourseStats[] = Array.from(courseMap.values()).map(
-    (e) => ({
-      courseId: e.courseId,
-      courseTitle: e.courseTitle,
-      courseSlug: e.courseSlug,
-      totalSeats: e.total,
-      claimedSeats: e.claimed,
-    })
-  );
-
-  // Build Seat rows with claimer email
-  const refundRequestStatuses = new Map(
-    [...new Set(allSeats.map((seat) => seat.purchaseId))].map((purchaseId) => [
-      purchaseId,
-      getRefundRequestStatus(purchaseId),
-    ])
-  );
-
-  const seatRows: SeatRow[] = allSeats.map((seat) => {
-    let claimedByEmail: string | null = null;
-    if (seat.claimedByUserId !== null) {
-      const user = getUserById(seat.claimedByUserId);
-      claimedByEmail = user?.email ?? null;
-    }
-    const course = getCourseById(seat.courseId);
-    return {
-      id: seat.id,
-      code: seat.code,
-      courseId: seat.courseId,
-      courseTitle: course?.title ?? "Unknown Course",
-      claimedByEmail,
-      refunded:
-        refundRequestStatuses.get(seat.purchaseId) === RefundRequestStatus.Approved,
-      createdAt: seat.createdAt,
-    };
-  });
-
-  // The Team Purchases this Buyer paid for, each refunded whole or not at all.
-  const purchaseIds = [...new Set(allSeats.map((seat) => seat.purchaseId))];
-  const teamPurchases: TeamPurchaseRow[] = getBuyerPurchases(
-    currentUserId,
-    purchaseIds
-  )
-    .map((purchase) => {
-      const purchaseSeats = allSeats.filter((seat) => seat.purchaseId === purchase.id);
-      const course = getCourseById(purchase.courseId);
-      const eligibility = getRefundEligibility(
-        purchase,
-        currentUserId,
-        purchase.courseId
-      );
-      return {
-        purchaseId: purchase.id,
-        courseTitle: course?.title ?? "Unknown Course",
-        courseSlug: course?.slug ?? "",
-        purchasedAt: purchase.createdAt,
-        amount: purchase.amountPaid,
-        totalSeats: purchaseSeats.length,
-        claimedSeats: purchaseSeats.filter((seat) => seat.claimedByUserId !== null).length,
-        canRequestRefund: eligibility.eligible,
-        refundRequestStatus: refundRequestStatuses.get(purchase.id) ?? null,
-      };
-    })
-    .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt));
-
-  return { courseStats, teamPurchases, seatRows };
+  return result.roster;
 }
 
-function CopyButton({ code }: { code: string }) {
+const seatActionSchema = z.discriminatedUnion("intent", [
+  z.object({
+    intent: z.literal("invite"),
+    seatId: z.coerce.number().int().positive(),
+    // The Seat module normalises the address it stores.
+    email: z
+      .string()
+      .trim()
+      .email("Enter the email address of the person to invite."),
+  }),
+  z.object({
+    intent: z.literal("withdraw"),
+    seatId: z.coerce.number().int().positive(),
+  }),
+  z.object({
+    intent: z.literal("release"),
+    seatId: z.coerce.number().int().positive(),
+  }),
+]);
+
+// Refusals more than one Seat action shares.
+const SEAT_NOT_FOUND = { message: "Seat not found.", status: 404 };
+const NOT_BUYER = {
+  message: "Only the Buyer can manage this Seat.",
+  status: 403,
+};
+const INVITATIONS_PAUSED = {
+  message: "Invitations are paused while your Refund Request is reviewed.",
+  status: 409,
+};
+
+/**
+ * Why an Invitation was refused. The Buyer can fix the ones marked
+ * `correctable` from the invite form, so they come back to it as a message.
+ */
+const INVITE_REFUSALS: Record<
+  InviteRefusal,
+  { message: string; status: number; correctable: boolean }
+> = {
+  "not-found": { ...SEAT_NOT_FOUND, correctable: false },
+  "not-buyer": { ...NOT_BUYER, correctable: false },
+  "not-open": {
+    message: "This Seat is no longer open.",
+    status: 409,
+    correctable: true,
+  },
+  paused: { ...INVITATIONS_PAUSED, correctable: true },
+  refunded: {
+    message: "This purchase was refunded, so its Seats can't be offered.",
+    status: 410,
+    correctable: true,
+  },
+  "duplicate-invitation": {
+    message:
+      "That email already holds an Invitation or a Seat for this course on your Team.",
+    status: 409,
+    correctable: true,
+  },
+};
+
+const WITHDRAW_REFUSALS: Record<
+  WithdrawRefusal,
+  { message: string; status: number }
+> = {
+  "not-found": SEAT_NOT_FOUND,
+  "not-buyer": NOT_BUYER,
+  paused: INVITATIONS_PAUSED,
+  "not-invited": {
+    message: "This Seat has no Invitation to withdraw.",
+    status: 409,
+  },
+};
+
+const RELEASE_REFUSALS: Record<
+  ReleaseRefusal,
+  { message: string; status: number }
+> = {
+  "not-found": SEAT_NOT_FOUND,
+  "not-buyer": NOT_BUYER,
+  "not-claimed": {
+    message: "Nobody holds this Seat, so there's nothing to Release.",
+    status: 409,
+  },
+  "past-release-limit": {
+    message:
+      "This Seat's holder is past the Release limit, so it can't be Released.",
+    status: 409,
+  },
+};
+
+export async function action({ request }: Route.ActionArgs) {
+  const currentUserId = await getCurrentUserId(request);
+  if (!currentUserId) {
+    throw data("Select a user from the DevUI panel.", { status: 401 });
+  }
+
+  const parsed = parseFormData(await request.formData(), seatActionSchema);
+  if (!parsed.success) {
+    return data(
+      { error: Object.values(parsed.errors)[0] ?? "Invalid request." },
+      { status: 400 }
+    );
+  }
+
+  if (parsed.data.intent === "invite") {
+    const { seatId, email } = parsed.data;
+    const result = inviteToSeat(currentUserId, seatId, email);
+    if (!result.ok) {
+      const { message, status, correctable } = INVITE_REFUSALS[result.reason];
+      if (!correctable) throw data(message, { status });
+      return data({ error: message }, { status });
+    }
+    return { error: null };
+  }
+
+  if (parsed.data.intent === "withdraw") {
+    const result = withdrawInvitation(currentUserId, parsed.data.seatId);
+    if (!result.ok) {
+      const { message, status } = WITHDRAW_REFUSALS[result.reason];
+      throw data(message, { status });
+    }
+    return { error: null };
+  }
+
+  const result = releaseSeat(currentUserId, parsed.data.seatId);
+  if (!result.ok) {
+    const { message, status } = RELEASE_REFUSALS[result.reason];
+    throw data(message, { status });
+  }
+  return { error: null };
+}
+
+function CopyLink({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
@@ -218,7 +199,7 @@ function CopyButton({ code }: { code: string }) {
     <button
       onClick={handleCopy}
       className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-      title="Copy seat link"
+      title="Copy this Seat's link"
     >
       {copied ? (
         <>
@@ -235,14 +216,326 @@ function CopyButton({ code }: { code: string }) {
   );
 }
 
-export default function Team({ loaderData }: Route.ComponentProps) {
-  const { courseStats, teamPurchases, seatRows } = loaderData;
-  const [courseFilter, setCourseFilter] = useState<number | "all">("all");
+/** The purchase-wide notice above a Team Purchase's Seats. */
+function PurchaseBanner({ banner }: { banner: RosterBanner }) {
+  if (banner === "refunded") {
+    return (
+      <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+        Refunded. This purchase&apos;s Seats can no longer be claimed.
+      </p>
+    );
+  }
+  if (banner === "paused") {
+    return (
+      <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+        Refund requested. Invitations are paused and no Seat can be claimed or
+        offered until we&apos;ve reviewed it. If it&apos;s declined, they resume.
+      </p>
+    );
+  }
+  if (banner === "still-refundable") {
+    return (
+      <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+        You can still get a Refund for this purchase. Once anyone claims one of
+        its Seats, you can&apos;t, even if you later Release them.
+      </p>
+    );
+  }
+  return null;
+}
 
-  const filteredSeats =
-    courseFilter === "all"
-      ? seatRows
-      : seatRows.filter((seat) => seat.courseId === courseFilter);
+const STATUS_LABEL: Record<RosterSeatStatus, string> = {
+  claimed: "Claimed",
+  invited: "Invited",
+  "invited-paused": "Invited · paused",
+  open: "Open",
+  refunded: "Refunded",
+};
+
+const STATUS_STYLE: Record<RosterSeatStatus, string> = {
+  claimed: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  invited:
+    "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  "invited-paused": "bg-muted text-muted-foreground",
+  open: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  refunded: "bg-muted text-muted-foreground",
+};
+
+function StatusChip({ status }: { status: RosterSeatStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        STATUS_STYLE[status]
+      )}
+    >
+      {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+/** Who holds the Seat, or its code while nobody does. */
+function SeatPerson({ seat }: { seat: RosterSeat }) {
+  if (seat.status === "claimed") {
+    return (
+      <>
+        <p className="font-medium">{seat.holder.name}</p>
+        <p className="text-xs text-muted-foreground">{seat.holder.email}</p>
+      </>
+    );
+  }
+  if (seat.status === "invited" || seat.status === "invited-paused") {
+    return (
+      <>
+        <p>{seat.invitedEmail}</p>
+        <p className="text-xs text-muted-foreground">
+          Invited {formatRelativeTime(seat.invitedAt)}
+        </p>
+      </>
+    );
+  }
+  return (
+    <code className="rounded bg-muted px-2 py-0.5 text-xs">{seat.code}</code>
+  );
+}
+
+/** Offers an open Seat to one person, named by email. */
+function InviteForm({ seatId }: { seatId: number }) {
+  const fetcher = useFetcher<typeof action>();
+  const error = fetcher.state === "idle" ? fetcher.data?.error : null;
+
+  return (
+    <fetcher.Form method="post" className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <input type="hidden" name="intent" value="invite" />
+        <input type="hidden" name="seatId" value={seatId} />
+        <input
+          type="email"
+          name="email"
+          required
+          aria-label="Email to invite"
+          aria-invalid={!!error}
+          placeholder="name@company.com"
+          className="w-48 rounded-md border border-input bg-background px-2 py-1 text-sm"
+        />
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={fetcher.state !== "idle"}
+        >
+          Invite
+        </Button>
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </fetcher.Form>
+  );
+}
+
+function WithdrawButton({ seatId }: { seatId: number }) {
+  const fetcher = useFetcher<typeof action>();
+
+  return (
+    <fetcher.Form method="post">
+      <input type="hidden" name="intent" value="withdraw" />
+      <input type="hidden" name="seatId" value={seatId} />
+      <Button
+        type="submit"
+        size="sm"
+        variant="ghost"
+        disabled={fetcher.state !== "idle"}
+      >
+        Withdraw
+      </Button>
+    </fetcher.Form>
+  );
+}
+
+/**
+ * Takes a claimed Seat back, after the Buyer confirms. The holder loses
+ * access at once, so the button first asks.
+ */
+function ReleaseButton({ seatId }: { seatId: number }) {
+  const fetcher = useFetcher<typeof action>();
+  const [confirming, setConfirming] = useState(false);
+
+  if (!confirming) {
+    return (
+      <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
+        Release
+      </Button>
+    );
+  }
+
+  return (
+    <fetcher.Form method="post" className="flex max-w-xs flex-col gap-2">
+      <input type="hidden" name="intent" value="release" />
+      <input type="hidden" name="seatId" value={seatId} />
+      <p className="text-xs text-muted-foreground">
+        They lose access straight away; their progress is kept if they get a
+        Seat again.
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          variant="destructive"
+          disabled={fetcher.state !== "idle"}
+        >
+          Release Seat
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => setConfirming(false)}
+        >
+          Cancel
+        </Button>
+      </div>
+    </fetcher.Form>
+  );
+}
+
+/**
+ * What the Buyer can do with one Seat: Invite to an open Seat or share its
+ * link, copy or Withdraw an Invitation, Release a claimed Seat. Nothing while
+ * a Refund Request has paused the purchase.
+ */
+function SeatActions({
+  seat,
+  banner,
+}: {
+  seat: RosterSeat;
+  banner: RosterBanner;
+}) {
+  if (banner === "paused") return null;
+  if (seat.status === "open") {
+    return (
+      <div className="flex flex-wrap items-start gap-2">
+        <InviteForm seatId={seat.id} />
+        <span className="py-1 text-xs text-muted-foreground">or</span>
+        <CopyLink code={seat.code} />
+      </div>
+    );
+  }
+  if (seat.status === "invited") {
+    return (
+      <div className="flex items-center gap-1">
+        <CopyLink code={seat.code} />
+        <WithdrawButton seatId={seat.id} />
+      </div>
+    );
+  }
+  if (seat.status === "claimed") {
+    if (seat.releasable) return <ReleaseButton seatId={seat.id} />;
+    return (
+      <span className="text-xs text-muted-foreground">
+        Past the Release limit
+      </span>
+    );
+  }
+  return null;
+}
+
+/** Ways to get money back for a Team Purchase, or what became of asking. */
+function RefundControls({ purchase }: { purchase: RosterPurchase }) {
+  if (purchase.canRequestRefund) {
+    return <RequestRefund slug={purchase.course.slug} offer={purchase} />;
+  }
+  if (purchase.refundRequestStatus === RefundRequestStatus.Declined) {
+    return <RefundRequestDeclined />;
+  }
+  return null;
+}
+
+function PurchaseSection({ purchase }: { purchase: RosterPurchase }) {
+  return (
+    <section aria-labelledby={`purchase-${purchase.purchaseId}`}>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2
+            id={`purchase-${purchase.purchaseId}`}
+            className="text-lg font-semibold"
+          >
+            {purchase.course.title}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Bought {new Date(purchase.purchasedAt).toLocaleDateString()} ·{" "}
+            {formatPrice(purchase.amount)} · {purchase.claimedSeats} /{" "}
+            {purchase.totalSeats} Seats claimed
+          </p>
+        </div>
+        <Link to={`/courses/${purchase.course.slug}/purchase?mode=team`}>
+          <Button variant="outline" size="sm">
+            Buy more seats
+          </Button>
+        </Link>
+      </div>
+
+      {purchase.banner && (
+        <div className="mb-3">
+          <PurchaseBanner banner={purchase.banner} />
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/50 text-left">
+              <th className="px-4 py-2 font-medium">Person</th>
+              <th className="px-4 py-2 font-medium">Status</th>
+              <th className="px-4 py-2 font-medium">Progress</th>
+              <th className="px-4 py-2 font-medium">Last active</th>
+              <th className="px-4 py-2 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {purchase.seats.map((seat) => (
+              <tr key={seat.id} className="border-b last:border-0">
+                <td className="px-4 py-3">
+                  <SeatPerson seat={seat} />
+                </td>
+                <td className="px-4 py-3">
+                  <StatusChip status={seat.status} />
+                </td>
+                <td className="px-4 py-3">
+                  {seat.status === "claimed" && (
+                    <SeatProgressBar
+                      percent={seat.progress.percent}
+                      finished={seat.progress.finished}
+                    />
+                  )}
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {seat.status === "claimed" &&
+                    (seat.progress.lastActive
+                      ? formatRelativeTime(seat.progress.lastActive)
+                      : "Never")}
+                </td>
+                <td className="px-4 py-3">
+                  <SeatActions seat={seat} banner={purchase.banner} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-3 max-w-sm">
+        <RefundControls purchase={purchase} />
+      </div>
+    </section>
+  );
+}
+
+export default function Team({ loaderData }: Route.ComponentProps) {
+  const { purchases } = loaderData;
 
   return (
     <div className="mx-auto max-w-7xl p-6 lg:p-8">
@@ -257,165 +550,19 @@ export default function Team({ loaderData }: Route.ComponentProps) {
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Team Management</h1>
         <p className="mt-1 text-muted-foreground">
-          Manage your team&apos;s course seats and seat links
+          Every Seat your Team Purchases give you, and who holds it
         </p>
       </div>
 
-      {/* Per-course stats */}
-      {courseStats.length > 0 && (
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {courseStats.map((stat) => (
-            <Card key={stat.courseId}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="size-4 text-muted-foreground" />
-                  <h3 className="font-semibold truncate">{stat.courseTitle}</h3>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {stat.claimedSeats}
-                      <span className="text-base font-normal text-muted-foreground">
-                        {" "}
-                        / {stat.totalSeats}
-                      </span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      seats claimed
-                    </p>
-                  </div>
-                  <Link to={`/courses/${stat.courseSlug}/purchase?mode=team`}>
-                    <Button variant="outline" size="sm">
-                      Buy more seats
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
+      {purchases.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No Seats yet.</p>
+      ) : (
+        <div className="space-y-10">
+          {purchases.map((purchase) => (
+            <PurchaseSection key={purchase.purchaseId} purchase={purchase} />
           ))}
         </div>
       )}
-
-      {/* Team Purchases */}
-      {teamPurchases.length > 0 && (
-        <div className="mb-8">
-          <h2 className="mb-4 text-lg font-semibold">Purchases</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {teamPurchases.map((purchase) => (
-              <Card key={purchase.purchaseId}>
-                <CardHeader className="pb-2">
-                  <h3 className="font-semibold truncate">
-                    {purchase.courseTitle}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(purchase.purchasedAt).toLocaleDateString()} ·{" "}
-                    {formatPrice(purchase.amount)} · {purchase.claimedSeats} /{" "}
-                    {purchase.totalSeats} seats claimed
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  {purchase.canRequestRefund ? (
-                    <RequestRefund
-                      slug={purchase.courseSlug}
-                      offer={purchase}
-                    />
-                  ) : purchase.refundRequestStatus ===
-                    RefundRequestStatus.Requested ? (
-                    <p className="border-t pt-4 text-xs text-muted-foreground">
-                      Refund requested. Its seats can&apos;t be claimed until we
-                      have reviewed it.
-                    </p>
-                  ) : purchase.refundRequestStatus === RefundRequestStatus.Approved ? (
-                    <p className="border-t pt-4 text-xs text-muted-foreground">
-                      Refunded. Its seats can no longer be claimed.
-                    </p>
-                  ) : purchase.refundRequestStatus === RefundRequestStatus.Declined ? (
-                    <RefundRequestDeclined />
-                  ) : null}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Seat list */}
-      <div>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Seats</h2>
-          {courseStats.length > 1 && (
-            <select
-              value={courseFilter}
-              onChange={(e) =>
-                setCourseFilter(
-                  e.target.value === "all" ? "all" : Number(e.target.value)
-                )
-              }
-              className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-            >
-              <option value="all">All courses</option>
-              {courseStats.map((stat) => (
-                <option key={stat.courseId} value={stat.courseId}>
-                  {stat.courseTitle}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        {filteredSeats.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No seats yet.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-3 text-left font-medium">Code</th>
-                  <th className="px-4 py-3 text-left font-medium">Course</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-left font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSeats.map((seat) => (
-                  <tr key={seat.id} className="border-b last:border-0">
-                    <td className="px-4 py-3">
-                      <code className="rounded bg-muted px-2 py-0.5 text-xs">
-                        {seat.code}
-                      </code>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {seat.courseTitle}
-                    </td>
-                    <td className="px-4 py-3">
-                      {seat.claimedByEmail ? (
-                        <span className="text-muted-foreground">
-                          Claimed by {seat.claimedByEmail}
-                        </span>
-                      ) : seat.refunded ? (
-                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                          Refunded
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                          Unclaimed
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {!seat.claimedByEmail && !seat.refunded && (
-                        <CopyButton code={seat.code} />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

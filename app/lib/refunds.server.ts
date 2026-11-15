@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, ne, notExists, sql } from "drizzle-orm";
 import { db } from "~/db";
 import {
   seats,
+  seatReleases,
   enrollments,
   purchases,
   lessonProgress,
@@ -15,21 +16,34 @@ import {
 import {
   checkRefundEligibility,
   isTeamPurchase,
+  type CourseUsage,
   type RefundDecisionOutcome,
 } from "~/lib/refunds";
+import { withdrawInvitationsOnRefund } from "~/lib/seats/refund-approval.server";
 
-/** How many Seats a purchase covers, and how many of them are claimed. */
+/**
+ * How many Seats a purchase covers, how many are claimed now, and how many
+ * were ever claimed: claimed now, or claimed once and since Released.
+ */
 export function getSeatCounts(purchaseId: number) {
+  const everClaimed = sql`${seats.claimedByUserId} is not null or exists (
+    select 1 from ${seatReleases} where ${seatReleases.seatId} = ${seats.id}
+  )`;
   const result = db
     .select({
       seats: sql<number>`count(*)`,
       claimedSeats: sql<number>`count(${seats.claimedByUserId})`,
+      everClaimedSeats: sql<number>`count(case when ${everClaimed} then 1 end)`,
     })
     .from(seats)
     .where(eq(seats.purchaseId, purchaseId))
     .get();
 
-  return { seats: result?.seats ?? 0, claimedSeats: result?.claimedSeats ?? 0 };
+  return {
+    seats: result?.seats ?? 0,
+    claimedSeats: result?.claimedSeats ?? 0,
+    everClaimedSeats: result?.everClaimedSeats ?? 0,
+  };
 }
 
 /** The status of a purchase's Refund Request, or null if it has none. */
@@ -44,7 +58,8 @@ export function getRefundRequestStatus(purchaseId: number) {
   return request?.status ?? null;
 }
 
-function getLessonIdsForCourse(courseId: number): number[] {
+/** The ids of every lesson in a course. */
+export function getLessonIdsForCourse(courseId: number): number[] {
   const rows = db
     .select({ id: lessons.id })
     .from(lessons)
@@ -55,7 +70,8 @@ function getLessonIdsForCourse(courseId: number): number[] {
   return rows.map((row) => row.id);
 }
 
-function getCompletedLessonCount(userId: number, lessonIds: number[]) {
+/** How many of the given lessons a user has completed. */
+export function getCompletedLessonCount(userId: number, lessonIds: number[]) {
   if (lessonIds.length === 0) return 0;
 
   const result = db
@@ -75,7 +91,7 @@ function getCompletedLessonCount(userId: number, lessonIds: number[]) {
 
 // Watched time is the furthest point reached in each lesson, added up, so
 // rewatching a lesson doesn't count twice.
-function getSecondsWatched(userId: number, lessonIds: number[]) {
+export function getSecondsWatched(userId: number, lessonIds: number[]) {
   if (lessonIds.length === 0) return 0;
 
   const furthestPerLesson = db
@@ -120,37 +136,42 @@ export function getUsage(purchaseId: number, buyerId: number, courseId: number) 
     return { kind: "team" as const, ...seatCounts };
   }
 
-  return { kind: "own" as const, ...getBuyerLearning(buyerId, courseId) };
+  return { kind: "own" as const, ...getCourseUsage(buyerId, courseId) };
 }
 
-/** How much of a course its Buyer has taken, as Refund Eligibility measures it. */
-function getBuyerLearning(buyerId: number, courseId: number) {
+/**
+ * How much of a course a Student has used, as the Own Purchase limits
+ * measure it.
+ */
+export function getCourseUsage(userId: number, courseId: number): CourseUsage {
   const lessonIds = getLessonIdsForCourse(courseId);
 
   return {
     lessonCount: lessonIds.length,
-    completedLessonCount: getCompletedLessonCount(buyerId, lessonIds),
-    secondsWatched: getSecondsWatched(buyerId, lessonIds),
+    completedLessonCount: getCompletedLessonCount(userId, lessonIds),
+    secondsWatched: getSecondsWatched(userId, lessonIds),
   };
 }
 
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
- * Whether the Buyer's Enrollment in a course comes from somewhere other than
- * this purchase: another Own Purchase not refunded, or a Seat they claimed.
+ * Whether a Student's Enrollment in a course is still given by something:
+ * a Seat they hold, or an Own Purchase not refunded. `exceptPurchaseId` is
+ * the purchase being refunded, which no longer counts, or null when none is.
  */
-function isEnrollmentGivenElsewhere(
+export function isEnrollmentGivenElsewhere(
   tx: Transaction,
-  purchase: { id: number; userId: number; courseId: number }
+  student: { userId: number; courseId: number },
+  exceptPurchaseId: number | null
 ) {
   const claimedSeat = tx
     .select({ id: seats.id })
     .from(seats)
     .where(
       and(
-        eq(seats.claimedByUserId, purchase.userId),
-        eq(seats.courseId, purchase.courseId)
+        eq(seats.claimedByUserId, student.userId),
+        eq(seats.courseId, student.courseId)
       )
     )
     .get();
@@ -162,9 +183,11 @@ function isEnrollmentGivenElsewhere(
     .from(purchases)
     .where(
       and(
-        eq(purchases.userId, purchase.userId),
-        eq(purchases.courseId, purchase.courseId),
-        ne(purchases.id, purchase.id),
+        eq(purchases.userId, student.userId),
+        eq(purchases.courseId, student.courseId),
+        exceptPurchaseId === null
+          ? undefined
+          : ne(purchases.id, exceptPurchaseId),
         notExists(
           tx
             .select({ id: seats.id })
@@ -198,7 +221,9 @@ export type RefundDecision =
  * Refund and ends what the purchase gave: the Buyer's Enrollment for an Own
  * Purchase, unless another Own Purchase or a claimed Seat still gives it. A
  * Team Purchase's Seats end with the Approval itself, since a Seat can't be
- * claimed once its purchase is refunded.
+ * claimed once its purchase is refunded, and its outstanding Invitations are
+ * withdrawn in the same transaction. Declining changes nothing, so paused
+ * Invitations resume as they were.
  *
  * Returns false if the Refund Request was no longer Requested, for instance
  * because another Admin decided it first.
@@ -237,10 +262,12 @@ export function decideRefundRequest(
 
     if (!decided) return false;
 
+    if (approved) withdrawInvitationsOnRefund(tx, purchase.id);
+
     if (
       approved &&
       !isTeamPurchase(getSeatCounts(purchase.id)) &&
-      !isEnrollmentGivenElsewhere(tx, purchase)
+      !isEnrollmentGivenElsewhere(tx, purchase, purchase.id)
     ) {
       tx.delete(enrollments)
         .where(
