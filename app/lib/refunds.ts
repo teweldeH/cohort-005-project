@@ -81,7 +81,13 @@ export type RefundEligibilityFacts = {
   refundRequestStatus: RefundRequestStatus | null;
   usage:
     | ({ kind: "own" } & Learning)
-    | { kind: "team"; seats: number; claimedSeats: number };
+    | {
+        kind: "team";
+        seats: number;
+        claimedSeats: number;
+        // Claimed now, or claimed once and since Released.
+        everClaimedSeats: number;
+      };
 };
 
 export type RefundIneligibleReason =
@@ -138,9 +144,9 @@ export function checkRefundEligibility(
 
   if (usage.kind === "team") {
     // A purchase is refunded whole or not at all, so one claimed Seat rules
-    // out the Refund. Nobody learns from an unclaimed Seat, so the Buyer's
-    // own learning doesn't count here.
-    if (usage.claimedSeats > 0) {
+    // out the Refund, and a Release never brings it back. Nobody learns from
+    // an unclaimed Seat, so the Buyer's own learning doesn't count here.
+    if (usage.everClaimedSeats > 0) {
       return { eligible: false, reason: "seat-claimed" };
     }
     return { eligible: true, lastDayInWindow };

@@ -280,6 +280,21 @@ export const seats = sqliteTable("seats", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
+// One row per Release: the Buyer took the Seat back from its holder. It is
+// the record that a Seat was once claimed, which Refund Eligibility counts.
+export const seatReleases = sqliteTable("seat_releases", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  seatId: integer("seat_id")
+    .notNull()
+    .references(() => seats.id),
+  formerHolderUserId: integer("former_holder_user_id")
+    .notNull()
+    .references(() => users.id),
+  releasedAt: text("released_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
 export const courseRatings = sqliteTable(
   "course_ratings",
   {

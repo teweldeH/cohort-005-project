@@ -8,6 +8,7 @@ import {
 import { getTeamForBuyer } from "~/lib/teams.server";
 import { getSeatProgress, type SeatProgress } from "./progress.server";
 import { standingFor, type PurchaseStanding } from "./queries.server";
+import { isWithinReleaseLimit } from "./release.server";
 import { refuse, type SeatResult } from "./result";
 
 /** The person holding a claimed Seat. */
@@ -39,6 +40,8 @@ export type RosterSeat =
       status: "claimed";
       holder: SeatHolder;
       progress: SeatProgress;
+      releasable: boolean;
+      releaseBlockedReason: "past-release-limit" | null;
     };
 
 export type RosterSeatStatus = RosterSeat["status"];
@@ -103,12 +106,15 @@ function toRosterSeat(
   standing: PurchaseStanding
 ): RosterSeat {
   if (holder) {
+    const releasable = isWithinReleaseLimit(holder.id, seat.courseId);
     return {
       id: seat.id,
       code: seat.code,
       status: "claimed",
       holder,
       progress: getSeatProgress(holder.id, seat.courseId),
+      releasable,
+      releaseBlockedReason: releasable ? null : "past-release-limit",
     };
   }
   if (standing === "refunded") {

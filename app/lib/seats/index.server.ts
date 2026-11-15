@@ -18,6 +18,7 @@ export {
   type InviteRefusal,
   type WithdrawRefusal,
 } from "./invitations.server";
+export { releaseSeat, type ReleaseRefusal } from "./release.server";
 export {
   getTeamRoster,
   type TeamRoster,

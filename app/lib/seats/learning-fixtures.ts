@@ -42,13 +42,18 @@ export function learningFixtures(db: TestDb, base: BaseData) {
       .run();
   }
 
-  function watchVideo(userId: number, lessonId: number, at: string) {
+  function watchVideo(
+    userId: number,
+    lessonId: number,
+    at: string,
+    positionSeconds = 60
+  ) {
     db.insert(schema.videoWatchEvents)
       .values({
         userId,
         lessonId,
         eventType: "progress",
-        positionSeconds: 60,
+        positionSeconds,
         createdAt: at,
       })
       .run();

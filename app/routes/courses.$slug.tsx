@@ -794,7 +794,10 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
               </h2>
             </CardHeader>
             <CardContent className="space-y-4">
-              <StudentCourseNotices notices={notices} />
+              <StudentCourseNotices
+                notices={notices}
+                buyLink={selfPurchaseLink}
+              />
               {isInstructor ? (
                 <Link to={`/instructor/${course.id}`}>
                   <Button className="w-full">
