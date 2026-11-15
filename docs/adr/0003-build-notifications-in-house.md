@@ -24,3 +24,7 @@ What we give up: a hosted feed UI, cross-channel delivery and batching come for
 free with a vendor, and we'd now have to build them ourselves if we ever need
 them. Changing our minds later means migrating stored Notifications and read
 state into the vendor.
+
+**Status (2026-11-14):** v1 shipped as a clickable UI mock only (#46). There is no
+`notifications` table, no email outbox and no `sendEmail`. The real build is
+recorded in #39 to #44, closed as not planned.
