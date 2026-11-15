@@ -33,6 +33,7 @@ const claimable = {
   paused: false,
   refunded: false,
   countryMismatch: false,
+  buyerCountry: "US",
 };
 
 describe("getClaimView", () => {

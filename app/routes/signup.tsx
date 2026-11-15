@@ -28,6 +28,12 @@ export function meta() {
   ];
 }
 
+// An email to fill in, such as the address an Invitation was sent to. A
+// malformed one is ignored rather than refused.
+const prefillSchema = z.object({
+  email: z.string().trim().toLowerCase().email().optional().catch(undefined),
+});
+
 export async function loader({ request, url }: Route.LoaderArgs) {
   const currentUserId = await getCurrentUserId(request);
   if (currentUserId) {
@@ -35,7 +41,10 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     const destination = redirectTo && redirectTo.startsWith("/") ? redirectTo : "/courses";
     throw redirect(destination);
   }
-  return {};
+  const { email } = prefillSchema.parse({
+    email: url.searchParams.get("email") ?? undefined,
+  });
+  return { prefillEmail: email ?? "" };
 }
 
 export async function action({ request, url }: Route.ActionArgs) {
@@ -85,7 +94,7 @@ export async function action({ request, url }: Route.ActionArgs) {
   });
 }
 
-export default function SignUp() {
+export default function SignUp({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -142,7 +151,7 @@ export default function SignUp() {
                   name="email"
                   type="email"
                   placeholder="you@example.com"
-                  defaultValue={actionData?.values?.email ?? ""}
+                  defaultValue={actionData?.values?.email ?? loaderData.prefillEmail}
                   aria-invalid={!!actionData?.errors?.email}
                 />
                 {actionData?.errors?.email && (
