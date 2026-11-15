@@ -37,6 +37,8 @@ export interface ClaimView {
   paused: boolean;
   refunded: boolean;
   countryMismatch: boolean;
+  /** The only country the Seat can be claimed from, if the purchase has one. */
+  buyerCountry: string | null;
 }
 
 function getBuyerName(buyerId: number) {
@@ -87,6 +89,7 @@ export function getClaimView(
         !alreadyClaimed &&
         !alreadyEnrolled &&
         isCountryMismatch(purchase, viewer.country),
+      buyerCountry: purchase.country,
     },
   };
 }
