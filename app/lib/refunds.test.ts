@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { RefundRequestStatus } from "~/db/schema";
-import { checkRefundEligibility, findOwnPurchase } from "./refunds";
+import {
+  checkOwnPurchaseLimits,
+  checkRefundEligibility,
+  findOwnPurchase,
+} from "./refunds";
 
 describe("findOwnPurchase", () => {
   it("picks the Buyer's Own Purchase over a newer Team Purchase", () => {
@@ -27,6 +31,49 @@ describe("findOwnPurchase", () => {
 
     expect(findOwnPurchase([team])).toBeUndefined();
     expect(findOwnPurchase([])).toBeUndefined();
+  });
+});
+
+describe("checkOwnPurchaseLimits", () => {
+  // 2 hours, the most a learner may watch and still be within the limits.
+  const twoHours = 7200;
+  const fresh = { lessonCount: 10, completedLessonCount: 0, secondsWatched: 0 };
+
+  it("keeps a learner who has barely started within the limits", () => {
+    expect(checkOwnPurchaseLimits(fresh)).toEqual({ within: true });
+  });
+
+  it("keeps a learner just under half the lessons completed within the limits", () => {
+    expect(
+      checkOwnPurchaseLimits({ ...fresh, completedLessonCount: 4 })
+    ).toEqual({ within: true });
+  });
+
+  it("puts a learner with exactly half the lessons completed outside the limits", () => {
+    expect(
+      checkOwnPurchaseLimits({ ...fresh, completedLessonCount: 5 })
+    ).toEqual({ within: false, reason: "too-much-completed" });
+  });
+
+  it("keeps a learner just under 2 hours watched within the limits", () => {
+    expect(
+      checkOwnPurchaseLimits({ ...fresh, secondsWatched: twoHours - 1 })
+    ).toEqual({ within: true });
+  });
+
+  it("puts a learner with exactly 2 hours watched outside the limits", () => {
+    expect(
+      checkOwnPurchaseLimits({ ...fresh, secondsWatched: twoHours })
+    ).toEqual({ within: false, reason: "too-much-watched" });
+  });
+
+  it("judges a course with no lessons by watched time alone", () => {
+    const empty = { lessonCount: 0, completedLessonCount: 0, secondsWatched: 0 };
+
+    expect(checkOwnPurchaseLimits(empty)).toEqual({ within: true });
+    expect(
+      checkOwnPurchaseLimits({ ...empty, secondsWatched: twoHours })
+    ).toEqual({ within: false, reason: "too-much-watched" });
   });
 });
 

@@ -34,6 +34,40 @@ export const REFUND_WINDOW_DAYS = 14;
 export const REFUND_WATCH_LIMIT_SECONDS = 2 * 60 * 60;
 export const REFUND_COMPLETION_LIMIT = 0.5;
 
+/** How much of a course a learner has taken. */
+export type Learning = {
+  lessonCount: number;
+  completedLessonCount: number;
+  secondsWatched: number;
+};
+
+export type OwnPurchaseLimitsCheck =
+  | { within: true }
+  | { within: false; reason: "too-much-completed" | "too-much-watched" };
+
+/**
+ * Whether a learner is within the Own Purchase limits: under half the
+ * course's lessons completed and under 2 hours watched. Refund Eligibility
+ * holds an Own Purchase's Buyer to them, and a Release its Seat holder.
+ */
+export function checkOwnPurchaseLimits(
+  learning: Learning
+): OwnPurchaseLimitsCheck {
+  if (
+    learning.lessonCount > 0 &&
+    learning.completedLessonCount / learning.lessonCount >=
+      REFUND_COMPLETION_LIMIT
+  ) {
+    return { within: false, reason: "too-much-completed" };
+  }
+
+  if (learning.secondsWatched >= REFUND_WATCH_LIMIT_SECONDS) {
+    return { within: false, reason: "too-much-watched" };
+  }
+
+  return { within: true };
+}
+
 /**
  * What is known about a purchase when checking Refund Eligibility. How much
  * of it has been used depends on what was bought: an Own Purchase is used by
@@ -46,12 +80,7 @@ export type RefundEligibilityFacts = {
   // while it is open, and once decided the decision stands.
   refundRequestStatus: RefundRequestStatus | null;
   usage:
-    | {
-        kind: "own";
-        lessonCount: number;
-        completedLessonCount: number;
-        secondsWatched: number;
-      }
+    | ({ kind: "own" } & Learning)
     | { kind: "team"; seats: number; claimedSeats: number };
 };
 
@@ -117,16 +146,8 @@ export function checkRefundEligibility(
     return { eligible: true, lastDayInWindow };
   }
 
-  if (
-    usage.lessonCount > 0 &&
-    usage.completedLessonCount / usage.lessonCount >= REFUND_COMPLETION_LIMIT
-  ) {
-    return { eligible: false, reason: "too-much-completed" };
-  }
-
-  if (usage.secondsWatched >= REFUND_WATCH_LIMIT_SECONDS) {
-    return { eligible: false, reason: "too-much-watched" };
-  }
+  const limits = checkOwnPurchaseLimits(usage);
+  if (!limits.within) return { eligible: false, reason: limits.reason };
 
   return { eligible: true, lastDayInWindow };
 }
