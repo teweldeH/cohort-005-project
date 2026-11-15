@@ -32,12 +32,16 @@ _Avoid_: Personal purchase, individual purchase
 A single purchase by a Buyer that covers several Seats for one course.
 
 **Seat**:
-One person's place on a course from a Team Purchase, either unclaimed or claimed; claiming a Seat gives that person an Enrollment. The Seats of a refunded Team Purchase can never be claimed.
+One person's place on a course from a Team Purchase, either unclaimed or claimed; claiming a Seat gives that person an Enrollment. An unclaimed Seat is either open, claimable by anyone with its link, or invited, held by an Invitation. The Seats of a refunded Team Purchase can never be claimed.
 _Avoid_: Coupon, licence, Redeem (for claim)
 
 **Invitation**:
-A Buyer's offer of one unclaimed Seat to a specific person, named by email, who alone can claim it.
-_Avoid_: Invite (as a noun), assignment
+A Buyer's offer of one unclaimed Seat to a specific person, named by email, who alone can claim it. The invitee accepts by claiming the Seat.
+_Avoid_: Invite (as a noun), assignment, Accept (for claim)
+
+**Turn down**:
+An invitee refusing an Invitation, which leaves its Seat open again.
+_Avoid_: Decline (that is an Admin's answer to a Refund Request), reject
 
 **Release**:
 A Buyer taking back a claimed Seat, which ends its holder's Enrollment and leaves the Seat unclaimed. Allowed only while its holder is within the limits Refund Eligibility sets for an Own Purchase. Giving a Seat to someone else is a Release followed by an Invitation.
