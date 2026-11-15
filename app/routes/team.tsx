@@ -25,6 +25,14 @@ import {
 } from "~/lib/refunds.server";
 import { formatPrice } from "~/lib/utils";
 import { getTeamForBuyer } from "~/lib/teams.server";
+// PROTOTYPE (#53) — throwaway Team page variants, switched by ?variant=
+import { useSearchParams } from "react-router";
+import { getPrototypeTeam } from "~/components/team-prototype/data.server";
+import { useMockTeam } from "~/components/team-prototype/types";
+import { VariantA } from "~/components/team-prototype/variant-a";
+import { VariantB } from "~/components/team-prototype/variant-b";
+import { VariantC } from "~/components/team-prototype/variant-c";
+import { PrototypeLog, PrototypeSwitcher } from "~/components/prototype-switcher";
 
 function getSeatsForTeam(teamId: number) {
   return db.select().from(seats).where(eq(seats.teamId, teamId)).all();
@@ -200,7 +208,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     })
     .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt));
 
-  return { courseStats, teamPurchases, seatRows };
+  // PROTOTYPE (#53): ?mockRefund=none pretends a never-claimed purchase has
+  // no Refund Request, to show the first-claim warning.
+  const prototype = getPrototypeTeam(currentUserId, {
+    pretendRefundable:
+      new URL(request.url).searchParams.get("mockRefund") === "none",
+  });
+
+  return { courseStats, teamPurchases, seatRows, prototype };
 }
 
 function CopyButton({ code }: { code: string }) {
@@ -235,7 +250,45 @@ function CopyButton({ code }: { code: string }) {
   );
 }
 
-export default function Team({ loaderData }: Route.ComponentProps) {
+const VARIANTS = [
+  { key: "A", name: "Roster table" },
+  { key: "B", name: "Board per purchase" },
+  { key: "C", name: "People first" },
+  { key: "current", name: "Today's page" },
+];
+
+export default function Team(props: Route.ComponentProps) {
+  const [params] = useSearchParams();
+  const variant = params.get("variant") ?? "A";
+  const team = useMockTeam(props.loaderData.prototype);
+
+  if (variant === "current") {
+    return (
+      <>
+        <CurrentTeamPage {...props} />
+        <PrototypeSwitcher variants={VARIANTS} />
+      </>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-7xl p-6 pb-32 lg:p-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Team</h1>
+        <p className="mt-1 text-muted-foreground">
+          Invite people to your Seats and see how they&apos;re getting on
+        </p>
+      </div>
+      {variant === "A" && <VariantA team={team} />}
+      {variant === "B" && <VariantB team={team} />}
+      {variant === "C" && <VariantC team={team} />}
+      <PrototypeSwitcher variants={VARIANTS} />
+      <PrototypeLog lines={team.log} />
+    </div>
+  );
+}
+
+function CurrentTeamPage({ loaderData }: Route.ComponentProps) {
   const { courseStats, teamPurchases, seatRows } = loaderData;
   const [courseFilter, setCourseFilter] = useState<number | "all">("all");
 
