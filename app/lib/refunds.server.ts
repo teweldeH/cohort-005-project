@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, ne, notExists, sql } from "drizzle-orm";
 import { db } from "~/db";
 import {
   seats,
+  seatReleases,
   enrollments,
   purchases,
   lessonProgress,
@@ -20,18 +21,29 @@ import {
 } from "~/lib/refunds";
 import { withdrawInvitationsOnRefund } from "~/lib/seats/refund-approval.server";
 
-/** How many Seats a purchase covers, and how many of them are claimed. */
+/**
+ * How many Seats a purchase covers, how many are claimed now, and how many
+ * were ever claimed: claimed now, or claimed once and since Released.
+ */
 export function getSeatCounts(purchaseId: number) {
+  const everClaimed = sql`${seats.claimedByUserId} is not null or exists (
+    select 1 from ${seatReleases} where ${seatReleases.seatId} = ${seats.id}
+  )`;
   const result = db
     .select({
       seats: sql<number>`count(*)`,
       claimedSeats: sql<number>`count(${seats.claimedByUserId})`,
+      everClaimedSeats: sql<number>`count(case when ${everClaimed} then 1 end)`,
     })
     .from(seats)
     .where(eq(seats.purchaseId, purchaseId))
     .get();
 
-  return { seats: result?.seats ?? 0, claimedSeats: result?.claimedSeats ?? 0 };
+  return {
+    seats: result?.seats ?? 0,
+    claimedSeats: result?.claimedSeats ?? 0,
+    everClaimedSeats: result?.everClaimedSeats ?? 0,
+  };
 }
 
 /** The status of a purchase's Refund Request, or null if it has none. */
@@ -141,23 +153,25 @@ export function getLearning(userId: number, courseId: number): Learning {
   };
 }
 
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
- * Whether the Buyer's Enrollment in a course comes from somewhere other than
- * this purchase: another Own Purchase not refunded, or a Seat they claimed.
+ * Whether a learner's Enrollment in a course is still given by something:
+ * a Seat they hold, or an Own Purchase not refunded. `exceptPurchaseId` is
+ * the purchase being refunded, which no longer counts.
  */
-function isEnrollmentGivenElsewhere(
+export function isEnrollmentGivenElsewhere(
   tx: Transaction,
-  purchase: { id: number; userId: number; courseId: number }
+  learner: { userId: number; courseId: number },
+  exceptPurchaseId: number | null = null
 ) {
   const claimedSeat = tx
     .select({ id: seats.id })
     .from(seats)
     .where(
       and(
-        eq(seats.claimedByUserId, purchase.userId),
-        eq(seats.courseId, purchase.courseId)
+        eq(seats.claimedByUserId, learner.userId),
+        eq(seats.courseId, learner.courseId)
       )
     )
     .get();
@@ -169,9 +183,11 @@ function isEnrollmentGivenElsewhere(
     .from(purchases)
     .where(
       and(
-        eq(purchases.userId, purchase.userId),
-        eq(purchases.courseId, purchase.courseId),
-        ne(purchases.id, purchase.id),
+        eq(purchases.userId, learner.userId),
+        eq(purchases.courseId, learner.courseId),
+        exceptPurchaseId === null
+          ? undefined
+          : ne(purchases.id, exceptPurchaseId),
         notExists(
           tx
             .select({ id: seats.id })
@@ -251,7 +267,7 @@ export function decideRefundRequest(
     if (
       approved &&
       !isTeamPurchase(getSeatCounts(purchase.id)) &&
-      !isEnrollmentGivenElsewhere(tx, purchase)
+      !isEnrollmentGivenElsewhere(tx, purchase, purchase.id)
     ) {
       tx.delete(enrollments)
         .where(

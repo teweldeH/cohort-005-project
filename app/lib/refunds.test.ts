@@ -186,10 +186,10 @@ describe("checkRefundEligibility", () => {
   });
 
   describe("for a Team Purchase", () => {
-    function team(claimedSeats: number) {
+    function team(claimedSeats: number, everClaimedSeats = claimedSeats) {
       return {
         ...facts,
-        usage: { kind: "team" as const, seats: 5, claimedSeats },
+        usage: { kind: "team" as const, seats: 5, claimedSeats, everClaimedSeats },
       };
     }
 
@@ -203,6 +203,14 @@ describe("checkRefundEligibility", () => {
     it("refuses once a single Seat is claimed", () => {
       // Refunded whole or not at all, so one claimed Seat keeps all five.
       expect(checkRefundEligibility(team(1), now)).toEqual({
+        eligible: false,
+        reason: "seat-claimed",
+      });
+    });
+
+    it("still refuses after the claimed Seat is Released", () => {
+      // None claimed now, but one was: a Release never reopens the Refund.
+      expect(checkRefundEligibility(team(0, 1), now)).toEqual({
         eligible: false,
         reason: "seat-claimed",
       });

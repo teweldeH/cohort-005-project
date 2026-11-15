@@ -14,10 +14,10 @@ export type InviteRefusal =
   | "duplicate-invitation";
 
 /**
- * A Seat and the Buyer of its Team Purchase. Only that Buyer may Invite to it
- * or withdraw its Invitation.
+ * A Seat and the Buyer of its Team Purchase. Only that Buyer may Invite to it,
+ * withdraw its Invitation or Release it.
  */
-function getSeatWithBuyer(seatId: number) {
+export function getSeatWithBuyer(seatId: number) {
   return db
     .select({ seat: seats, buyerId: purchases.userId })
     .from(seats)

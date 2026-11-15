@@ -17,8 +17,10 @@ import { SeatProgressBar, formatLastActive } from "~/components/seat-progress";
 import {
   getTeamRoster,
   inviteToSeat,
+  releaseSeat,
   withdrawInvitation,
   type InviteRefusal,
+  type ReleaseRefusal,
   type WithdrawRefusal,
   type RosterBanner,
   type RosterPurchase,
@@ -62,6 +64,10 @@ const seatActionSchema = z.discriminatedUnion("intent", [
   }),
   z.object({
     intent: z.literal("withdraw"),
+    seatId: z.coerce.number().int().positive(),
+  }),
+  z.object({
+    intent: z.literal("release"),
     seatId: z.coerce.number().int().positive(),
   }),
 ]);
@@ -117,6 +123,23 @@ const WITHDRAW_REFUSALS: Record<
   },
 };
 
+const RELEASE_REFUSALS: Record<
+  ReleaseRefusal,
+  { message: string; status: number }
+> = {
+  "not-found": { message: "Seat not found.", status: 404 },
+  "not-buyer": { message: NOT_BUYER, status: 403 },
+  "not-claimed": {
+    message: "Nobody holds this Seat, so there's nothing to Release.",
+    status: 409,
+  },
+  "past-release-limit": {
+    message:
+      "This Seat's holder is past the Release limit, so it can't be Released.",
+    status: 409,
+  },
+};
+
 export async function action({ request }: Route.ActionArgs) {
   const currentUserId = await getCurrentUserId(request);
   if (!currentUserId) {
@@ -142,9 +165,18 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: null };
   }
 
-  const result = withdrawInvitation(currentUserId, parsed.data.seatId);
+  if (parsed.data.intent === "withdraw") {
+    const result = withdrawInvitation(currentUserId, parsed.data.seatId);
+    if (!result.ok) {
+      const { message, status } = WITHDRAW_REFUSALS[result.reason];
+      throw data(message, { status });
+    }
+    return { error: null };
+  }
+
+  const result = releaseSeat(currentUserId, parsed.data.seatId);
   if (!result.ok) {
-    const { message, status } = WITHDRAW_REFUSALS[result.reason];
+    const { message, status } = RELEASE_REFUSALS[result.reason];
     throw data(message, { status });
   }
   return { error: null };
@@ -323,9 +355,55 @@ function WithdrawButton({ seatId }: { seatId: number }) {
 }
 
 /**
+ * Takes a claimed Seat back, after the Buyer confirms. The holder loses
+ * access at once, so the button first asks.
+ */
+function ReleaseButton({ seatId }: { seatId: number }) {
+  const fetcher = useFetcher<typeof action>();
+  const [confirming, setConfirming] = useState(false);
+
+  if (!confirming) {
+    return (
+      <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
+        Release
+      </Button>
+    );
+  }
+
+  return (
+    <fetcher.Form method="post" className="flex max-w-xs flex-col gap-2">
+      <input type="hidden" name="intent" value="release" />
+      <input type="hidden" name="seatId" value={seatId} />
+      <p className="text-xs text-muted-foreground">
+        They lose access straight away; their progress is kept if they get a
+        Seat again.
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          variant="destructive"
+          disabled={fetcher.state !== "idle"}
+        >
+          Release Seat
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => setConfirming(false)}
+        >
+          Cancel
+        </Button>
+      </div>
+    </fetcher.Form>
+  );
+}
+
+/**
  * What the Buyer can do with one Seat: Invite to an open Seat or share its
- * link, copy or Withdraw an Invitation. Nothing while a Refund Request has
- * paused the purchase.
+ * link, copy or Withdraw an Invitation, Release a claimed Seat. Nothing while
+ * a Refund Request has paused the purchase.
  */
 function SeatActions({
   seat,
@@ -350,6 +428,14 @@ function SeatActions({
         <CopyLink code={seat.code} />
         <WithdrawButton seatId={seat.id} />
       </div>
+    );
+  }
+  if (seat.status === "claimed") {
+    if (seat.releasable) return <ReleaseButton seatId={seat.id} />;
+    return (
+      <span className="text-xs text-muted-foreground">
+        Past the Release limit
+      </span>
     );
   }
   return null;

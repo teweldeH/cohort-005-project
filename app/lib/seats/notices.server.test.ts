@@ -4,6 +4,7 @@ import {
   claimSeat,
   getClaimView,
   getStudentCourseNotices,
+  releaseSeat,
 } from "./index.server";
 import { seatFixtures } from "./test-fixtures";
 
@@ -59,6 +60,29 @@ describe("getStudentCourseNotices", () => {
     fixtures.enroll(base.user.id);
 
     expect(getStudentCourseNotices(base.user.id, base.course.id)).toEqual([]);
+  });
+
+  it("tells a former holder their Seat was Released by the Buyer", () => {
+    const holder = fixtures.addStudent("holder@example.com");
+    const { seats } = fixtures.buyTeamPurchase();
+    claimSeat("SEAT-1", holder.id, "US");
+
+    releaseSeat(base.user.id, seats[0].id);
+
+    expect(getStudentCourseNotices(holder.id, base.course.id)).toEqual([
+      { kind: "released", buyerName: "Test User" },
+    ]);
+  });
+
+  it("drops the Release notice once the former holder has the course again", () => {
+    const holder = fixtures.addStudent("holder@example.com");
+    const { seats } = fixtures.buyTeamPurchase();
+    claimSeat("SEAT-1", holder.id, "US");
+    releaseSeat(base.user.id, seats[0].id);
+
+    fixtures.enroll(holder.id);
+
+    expect(getStudentCourseNotices(holder.id, base.course.id)).toEqual([]);
   });
 
   it("tells a holder only about the course their Seat is on", () => {
