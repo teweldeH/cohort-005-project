@@ -272,6 +272,9 @@ export const seats = sqliteTable("seats", {
     .references(() => purchases.id),
   claimedByUserId: integer("claimed_by_user_id").references(() => users.id),
   claimedAt: text("claimed_at"),
+  // Set while the Seat is offered to one person by email (stored lower-cased).
+  invitedEmail: text("invited_email"),
+  invitedAt: text("invited_at"),
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),

@@ -6,7 +6,7 @@ import { resolveCountry } from "~/lib/country.server";
 import { parseParams, parseFormData } from "~/lib/validation";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { Ticket, AlertCircle, CheckCircle2, Globe } from "lucide-react";
+import { Ticket, AlertCircle, CheckCircle2, Globe, Mail } from "lucide-react";
 import { data } from "react-router";
 import {
   claimSeat,
@@ -18,17 +18,24 @@ const SEAT_ON_HOLD_MESSAGE =
   "This seat can't be claimed right now. Please ask the person who shared this link.";
 const SEAT_REFUNDED_MESSAGE =
   "This seat is no longer available. Please ask the person who shared this link.";
+// A code stops existing when an Invitation is made or withdrawn, and there is
+// no telling that apart from a mistyped one.
+const NO_LONGER_AVAILABLE_MESSAGE =
+  "This Invitation is no longer available. Please ask the person who shared this link for a new one.";
+const DIFFERENT_ADDRESS_MESSAGE =
+  "This Invitation is for a different address. Log in with the email it was sent to.";
 
 /** Why a claim was refused, as the claim page reports it. */
 const CLAIM_REFUSALS: Record<ClaimRefusal, { message: string; status: number }> =
   {
-    "not-found": { message: "Seat not found.", status: 404 },
+    "not-found": { message: NO_LONGER_AVAILABLE_MESSAGE, status: 404 },
     "already-claimed": {
       message: "This seat has already been claimed.",
       status: 409,
     },
     paused: { message: SEAT_ON_HOLD_MESSAGE, status: 409 },
     refunded: { message: SEAT_REFUNDED_MESSAGE, status: 410 },
+    "not-invited-email": { message: DIFFERENT_ADDRESS_MESSAGE, status: 403 },
     "already-enrolled": {
       message: "You are already enrolled in this course.",
       status: 409,
@@ -71,7 +78,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
         `/login?redirectTo=${encodeURIComponent(`/claim/${code}`)}`
       );
     }
-    throw data("Seat not found.", { status: 404 });
+    throw data(NO_LONGER_AVAILABLE_MESSAGE, { status: 404 });
   }
 
   return result.view;
@@ -106,6 +113,7 @@ export default function Claim({ loaderData }: Route.ComponentProps) {
   const {
     course,
     code,
+    invitation,
     alreadyClaimed,
     alreadyEnrolled,
     paused,
@@ -115,8 +123,11 @@ export default function Claim({ loaderData }: Route.ComponentProps) {
   const fetcher = useFetcher();
   const isSubmitting = fetcher.state !== "idle";
 
+  const forSomeoneElse = invitation !== null && !invitation.forViewer;
+
   // Determine which state to show
   const canClaim =
+    !forSomeoneElse &&
     !alreadyClaimed &&
     !alreadyEnrolled &&
     !paused &&
@@ -163,6 +174,18 @@ export default function Claim({ loaderData }: Route.ComponentProps) {
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
                 {SEAT_REFUNDED_MESSAGE}
+              </p>
+            </div>
+          ) : forSomeoneElse ? (
+            <div className="rounded-lg bg-amber-50 p-4 dark:bg-amber-900/20">
+              <div className="flex items-center justify-center gap-2 text-amber-700 dark:text-amber-400">
+                <Mail className="size-5" />
+                <span className="font-medium">
+                  This Invitation is for a different address
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Log in with the email address this Invitation was sent to.
               </p>
             </div>
           ) : alreadyEnrolled ? (
