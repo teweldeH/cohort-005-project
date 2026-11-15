@@ -14,8 +14,6 @@ import {
   enrollments,
   lessonProgress,
   courseRatings,
-  purchases,
-  seats,
   LessonProgressStatus,
 } from "~/db/schema";
 import { eq, and, or, sql } from "drizzle-orm";
@@ -46,7 +44,7 @@ import {
   RequestRefund,
 } from "~/components/request-refund";
 import { data, isRouteErrorResponse } from "react-router";
-import { findOwnPurchase } from "~/lib/refunds";
+import { getBuyerPurchases } from "~/lib/purchase.server";
 import { getRefundEligibility } from "~/lib/refunds.server";
 import { formatDuration, formatPrice } from "~/lib/utils";
 import { renderMarkdown } from "~/lib/markdown.server";
@@ -367,34 +365,17 @@ function rateCourse(userId: number, courseId: number, rating: number) {
     .get();
 }
 
-function getOwnPurchase(userId: number, courseId: number) {
-  const buyerPurchases = db
-    .select({
-      id: purchases.id,
-      createdAt: purchases.createdAt,
-      amountPaid: purchases.amountPaid,
-      seats: sql<number>`count(${seats.id})`,
-    })
-    .from(purchases)
-    .leftJoin(seats, eq(seats.purchaseId, purchases.id))
-    .where(and(eq(purchases.userId, userId), eq(purchases.courseId, courseId)))
-    .groupBy(purchases.id)
-    .all();
-
-  return findOwnPurchase(buyerPurchases);
-}
-
 /**
  * What the Buyer is offered if they want their money back for their Own
  * Purchase, or null if it cannot be refunded. A Team Purchase is not offered
  * here: this page is about the Buyer's own access.
  */
 function getRefundOffer(userId: number, courseId: number) {
-  const purchase = getOwnPurchase(userId, courseId);
+  const purchase = getBuyerPurchases(userId, courseId).own;
 
   if (!purchase) return null;
 
-  const eligibility = getRefundEligibility(purchase, userId, courseId);
+  const eligibility = getRefundEligibility(purchase);
   if (!eligibility.eligible) {
     // A Declined Refund Request is final, so say so rather than just
     // dropping the offer.

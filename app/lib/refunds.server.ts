@@ -1,8 +1,7 @@
-import { and, desc, eq, inArray, ne, notExists, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, notExists, sql } from "drizzle-orm";
 import { db, type Transaction } from "~/db";
 import {
   seats,
-  seatReleases,
   enrollments,
   purchases,
   lessonProgress,
@@ -13,50 +12,14 @@ import {
   RefundRequestStatus,
   videoWatchEvents,
 } from "~/db/schema";
+import { getPurchase, type Purchase } from "~/lib/purchase.server";
 import {
   checkRefundEligibility,
-  isTeamPurchase,
   type CourseUsage,
   type RefundDecisionOutcome,
+  type RefundEligibilityFacts,
 } from "~/lib/refunds";
 import { withdrawInvitationsOnRefund } from "~/lib/seats/refund-approval.server";
-
-/**
- * How many Seats a purchase covers, how many are claimed now, and how many
- * were ever claimed: claimed now, or claimed once and since Released.
- */
-export function getSeatCounts(purchaseId: number) {
-  const everClaimed = sql`${seats.claimedByUserId} is not null or exists (
-    select 1 from ${seatReleases} where ${seatReleases.seatId} = ${seats.id}
-  )`;
-  const result = db
-    .select({
-      seats: sql<number>`count(*)`,
-      claimedSeats: sql<number>`count(${seats.claimedByUserId})`,
-      everClaimedSeats: sql<number>`count(case when ${everClaimed} then 1 end)`,
-    })
-    .from(seats)
-    .where(eq(seats.purchaseId, purchaseId))
-    .get();
-
-  return {
-    seats: result?.seats ?? 0,
-    claimedSeats: result?.claimedSeats ?? 0,
-    everClaimedSeats: result?.everClaimedSeats ?? 0,
-  };
-}
-
-/** The status of a purchase's Refund Request, or null if it has none. */
-export function getRefundRequestStatus(purchaseId: number) {
-  const request = db
-    .select({ status: refundRequests.status })
-    .from(refundRequests)
-    .where(eq(refundRequests.purchaseId, purchaseId))
-    .orderBy(desc(refundRequests.id))
-    .get();
-
-  return request?.status ?? null;
-}
 
 /** The ids of every lesson in a course. */
 export function getLessonIdsForCourse(courseId: number): number[] {
@@ -111,32 +74,40 @@ export function getSecondsWatched(userId: number, lessonIds: number[]) {
   return furthestPerLesson.reduce((total, row) => total + row.furthest, 0);
 }
 
-/** Refund Eligibility for a Buyer's purchase of a course, read from the database. */
-export function getRefundEligibility(
-  purchase: { id: number; createdAt: string; amountPaid: number },
-  buyerId: number,
-  courseId: number
-) {
+/** Refund Eligibility for a purchase, judged from the one read of it. */
+export function getRefundEligibility(purchase: Purchase) {
   return checkRefundEligibility(
     {
       purchasedAt: purchase.createdAt,
       amountPaid: purchase.amountPaid,
-      refundRequestStatus: getRefundRequestStatus(purchase.id),
-      usage: getUsage(purchase.id, buyerId, courseId),
+      refundRequestStatus: purchase.refundRequestStatus,
+      usage: getUsage(purchase),
     },
     new Date()
   );
 }
 
-/** How much of a purchase has been used, as Refund Eligibility measures it. */
-export function getUsage(purchaseId: number, buyerId: number, courseId: number) {
-  const seatCounts = getSeatCounts(purchaseId);
-
-  if (isTeamPurchase(seatCounts)) {
-    return { kind: "team" as const, ...seatCounts };
+/**
+ * How much of a purchase has been used, as Refund Eligibility measures it:
+ * its Seats for a Team Purchase, its Buyer's own use of the course for an
+ * Own Purchase.
+ */
+export function getUsage(
+  purchase: Purchase
+): RefundEligibilityFacts["usage"] {
+  if (purchase.kind === "team") {
+    return {
+      kind: "team",
+      seats: purchase.seats.total,
+      claimedSeats: purchase.seats.claimed,
+      everClaimedSeats: purchase.seats.everClaimed,
+    };
   }
 
-  return { kind: "own" as const, ...getCourseUsage(buyerId, courseId) };
+  return {
+    kind: "own",
+    ...getCourseUsage(purchase.userId, purchase.courseId),
+  };
 }
 
 /**
@@ -264,7 +235,7 @@ export function decideRefundRequest(
 
     if (
       approved &&
-      !isTeamPurchase(getSeatCounts(purchase.id)) &&
+      getPurchase({ id: purchase.id }, tx)?.kind === "own" &&
       !isEnrollmentGivenElsewhere(tx, purchase, purchase.id)
     ) {
       tx.delete(enrollments)

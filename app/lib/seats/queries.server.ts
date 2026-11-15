@@ -1,14 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "~/db";
-import {
-  courses,
-  enrollments,
-  purchases,
-  RefundRequestStatus,
-  seats,
-  users,
-} from "~/db/schema";
-import { getRefundRequestStatus } from "~/lib/refunds.server";
+import { courses, enrollments, purchases, seats, users } from "~/db/schema";
 import { normaliseEmail } from "./email";
 
 /** A Seat by its code, with the course and Team Purchase it belongs to. */
@@ -33,26 +25,6 @@ export function getSeatWithBuyer(seatId: number) {
     .innerJoin(purchases, eq(seats.purchaseId, purchases.id))
     .where(eq(seats.id, seatId))
     .get();
-}
-
-/**
- * Whether a Team Purchase's Seats are paused (its Refund Request is waiting on
- * a decision) or refunded (the request was approved). Neither is stored: both
- * are read from the Refund Request.
- */
-export type PurchaseStanding = "active" | "paused" | "refunded";
-
-export function getPurchaseStanding(purchaseId: number): PurchaseStanding {
-  return standingFor(getRefundRequestStatus(purchaseId));
-}
-
-/** The standing a Team Purchase's latest Refund Request status gives it. */
-export function standingFor(
-  status: RefundRequestStatus | null
-): PurchaseStanding {
-  if (status === RefundRequestStatus.Requested) return "paused";
-  if (status === RefundRequestStatus.Approved) return "refunded";
-  return "active";
 }
 
 export function isUserEnrolled(userId: number, courseId: number) {

@@ -1,9 +1,9 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "~/db";
 import { enrollments, seats } from "~/db/schema";
+import { getStanding } from "~/lib/purchase.server";
 import { refuse, type SeatResult } from "./result";
 import {
-  getPurchaseStanding,
   getSeatByCode,
   invitationFor,
   isCountryMismatch,
@@ -22,7 +22,8 @@ export type ClaimRefusal =
 /**
  * Claims a Seat for a user, giving them an Enrollment in its course. The
  * claim is a conditional update inside one transaction, so of two claims on
- * the same Seat only one wins.
+ * the same Seat only one wins, and the purchase's Standing is checked in
+ * that same transaction.
  */
 export function claimSeat(
   code: string,
@@ -41,22 +42,23 @@ export function claimSeat(
 
   if (seat.claimedByUserId !== null) return refuse("already-claimed");
 
-  // A claimed Seat rules out a Refund, so no Seat is claimed while the Buyer
-  // is waiting on one, and a refunded purchase's Seats are gone for good.
-  const standing = getPurchaseStanding(seat.purchaseId);
-  if (standing !== "active") return refuse(standing);
-
-  // An invited Seat is held for one person; only their account may claim it.
-  const invitation = invitationFor(seat, userId);
-  if (invitation && !invitation.forViewer) return refuse("not-invited-email");
-
-  if (isUserEnrolled(userId, seat.courseId)) {
-    return refuse("already-enrolled");
-  }
-
-  if (isCountryMismatch(purchase, country)) return refuse("country-mismatch");
-
   return db.transaction((tx) => {
+    // A claimed Seat rules out a Refund, so no Seat is claimed while the
+    // Buyer is waiting on one, and a refunded purchase's Seats are gone for
+    // good.
+    const standing = getStanding(seat.purchaseId, tx);
+    if (standing !== "active") return refuse(standing);
+
+    // An invited Seat is held for one person; only their account may claim it.
+    const invitation = invitationFor(seat, userId);
+    if (invitation && !invitation.forViewer) return refuse("not-invited-email");
+
+    if (isUserEnrolled(userId, seat.courseId)) {
+      return refuse("already-enrolled");
+    }
+
+    if (isCountryMismatch(purchase, country)) return refuse("country-mismatch");
+
     const claimed = tx
       .update(seats)
       .set({

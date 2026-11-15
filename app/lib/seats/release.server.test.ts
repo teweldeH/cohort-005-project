@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import * as schema from "~/db/schema";
 import { createTestDb, seedBaseData } from "~/test/setup";
+import { getPurchase } from "~/lib/purchase.server";
 import { getRefundEligibility } from "~/lib/refunds.server";
 import {
   claimSeat,
@@ -175,9 +176,8 @@ describe("releaseSeat", () => {
 
     releaseSeat(base.user.id, seat.id);
 
-    expect(
-      getRefundEligibility(purchase, base.user.id, base.course.id)
-    ).toEqual({ eligible: false, reason: "seat-claimed" });
+    const read = getPurchase({ id: purchase.id });
+    expect(read && getRefundEligibility(read)).toEqual({ eligible: false, reason: "seat-claimed" });
   });
 
   it("shows the roster which claimed Seats can be Released", () => {

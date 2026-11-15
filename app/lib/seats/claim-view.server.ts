@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import { db } from "~/db";
 import { users } from "~/db/schema";
+import { getStanding } from "~/lib/purchase.server";
 import { refuse, type SeatResult } from "./result";
 import {
-  getPurchaseStanding,
   getSeatByCode,
   invitationFor,
   isCountryMismatch,
@@ -71,7 +71,7 @@ export function getClaimView(
   // A claimed Seat is simply taken, whatever became of its purchase since.
   const standing = alreadyClaimed
     ? "active"
-    : getPurchaseStanding(seat.purchaseId);
+    : getStanding(seat.purchaseId);
 
   return {
     ok: true,
