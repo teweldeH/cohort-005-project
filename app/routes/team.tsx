@@ -113,6 +113,10 @@ const WITHDRAW_REFUSALS: Record<
 > = {
   "not-found": { message: "Seat not found.", status: 404 },
   "not-buyer": { message: NOT_BUYER, status: 403 },
+  paused: {
+    message: "Invitations are paused while your Refund Request is reviewed.",
+    status: 409,
+  },
   "not-invited": {
     message: "This Seat has no Invitation to withdraw.",
     status: 409,
@@ -222,8 +226,8 @@ function PurchaseBanner({ banner }: { banner: RosterBanner }) {
   if (banner === "paused") {
     return (
       <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-        Refund requested. No Seat can be claimed until we&apos;ve reviewed it.
-        If it&apos;s declined, they can be claimed again.
+        Refund requested. Invitations are paused and no Seat can be claimed or
+        offered until we&apos;ve reviewed it. If it&apos;s declined, they resume.
       </p>
     );
   }
@@ -242,6 +246,7 @@ function PurchaseBanner({ banner }: { banner: RosterBanner }) {
 const STATUS_LABEL: Record<RosterSeatStatus, string> = {
   claimed: "Claimed",
   invited: "Invited",
+  "invited-paused": "Invited · paused",
   open: "Open",
   refunded: "Refunded",
 };
@@ -250,6 +255,7 @@ const STATUS_STYLE: Record<RosterSeatStatus, string> = {
   claimed: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
   invited:
     "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  "invited-paused": "bg-muted text-muted-foreground",
   open: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   refunded: "bg-muted text-muted-foreground",
 };
@@ -277,7 +283,7 @@ function SeatPerson({ seat }: { seat: RosterSeat }) {
       </>
     );
   }
-  if (seat.status === "invited") {
+  if (seat.status === "invited" || seat.status === "invited-paused") {
     return (
       <>
         <p>{seat.invitedEmail}</p>

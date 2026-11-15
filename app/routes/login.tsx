@@ -27,6 +27,12 @@ export function meta() {
   ];
 }
 
+// An email to fill in, such as the address an Invitation was sent to. A
+// malformed one is ignored rather than refused.
+const prefillSchema = z.object({
+  email: z.string().trim().toLowerCase().email().optional().catch(undefined),
+});
+
 export async function loader({ request, url }: Route.LoaderArgs) {
   const currentUserId = await getCurrentUserId(request);
   if (currentUserId) {
@@ -34,7 +40,19 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     const destination = redirectTo && redirectTo.startsWith("/") ? redirectTo : "/courses";
     throw redirect(destination);
   }
-  return {};
+  const { email } = prefillSchema.parse({
+    email: url.searchParams.get("email") ?? undefined,
+  });
+  return { prefillEmail: email ?? "" };
+}
+
+/** The sign-up page, carrying on to the same place with the email filled in. */
+function signupHref(redirectTo: string | null, email: string) {
+  const params = new URLSearchParams();
+  if (redirectTo) params.set("redirectTo", redirectTo);
+  if (email) params.set("email", email);
+  const query = params.toString();
+  return query ? `/signup?${query}` : "/signup";
 }
 
 export async function action({ request, url }: Route.ActionArgs) {
@@ -70,12 +88,13 @@ export async function action({ request, url }: Route.ActionArgs) {
   });
 }
 
-export default function Login() {
+export default function Login({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
+  const email = actionData?.values?.email || loaderData.prefillEmail;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -105,7 +124,7 @@ export default function Login() {
                   name="email"
                   type="email"
                   placeholder="you@example.com"
-                  defaultValue={actionData?.values?.email ?? ""}
+                  defaultValue={email}
                   aria-invalid={!!actionData?.errors?.email}
                 />
                 {actionData?.errors?.email && (
@@ -113,7 +132,7 @@ export default function Login() {
                     {actionData.errors.email}{" "}
                     {actionData.errors.email.includes("No account") && (
                       <Link
-                        to={redirectTo ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}` : "/signup"}
+                        to={signupHref(redirectTo, email)}
                         className="font-medium text-primary hover:underline"
                       >
                         Sign up instead
@@ -137,7 +156,7 @@ export default function Login() {
         <p className="mt-4 text-center text-sm text-muted-foreground">
           Don't have an account?{" "}
           <Link
-            to={redirectTo ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}` : "/signup"}
+            to={signupHref(redirectTo, email)}
             className="font-medium text-primary hover:underline"
           >
             Sign up

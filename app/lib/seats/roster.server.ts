@@ -21,15 +21,15 @@ export interface SeatHolder {
 /**
  * One Seat on the roster. Its status is derived, never stored: claimed when
  * someone holds it, refunded when its Team Purchase was refunded, invited
- * while it is offered to one person by email, otherwise open. Later states
- * (invited-paused) join this union, each with the fields only it has.
+ * while it is offered to one person by email (invited-paused while a Refund
+ * Request is Requested), otherwise open. Each state carries only its fields.
  */
 export type RosterSeat =
   | { id: number; code: string; status: "open" }
   | {
       id: number;
       code: string;
-      status: "invited";
+      status: "invited" | "invited-paused";
       invitedEmail: string;
       invitedAt: string;
     }
@@ -124,7 +124,7 @@ function toRosterSeat(
     return {
       id: seat.id,
       code: seat.code,
-      status: "invited",
+      status: standing === "paused" ? "invited-paused" : "invited",
       invitedEmail: seat.invitedEmail,
       invitedAt: seat.invitedAt ?? seat.createdAt,
     };

@@ -19,6 +19,7 @@ import {
   type Learning,
   type RefundDecisionOutcome,
 } from "~/lib/refunds";
+import { withdrawInvitationsOnRefund } from "~/lib/seats/refund-approval.server";
 
 /**
  * How many Seats a purchase covers, how many are claimed now, and how many
@@ -220,7 +221,9 @@ export type RefundDecision =
  * Refund and ends what the purchase gave: the Buyer's Enrollment for an Own
  * Purchase, unless another Own Purchase or a claimed Seat still gives it. A
  * Team Purchase's Seats end with the Approval itself, since a Seat can't be
- * claimed once its purchase is refunded.
+ * claimed once its purchase is refunded, and its outstanding Invitations are
+ * withdrawn in the same transaction. Declining changes nothing, so paused
+ * Invitations resume as they were.
  *
  * Returns false if the Refund Request was no longer Requested, for instance
  * because another Admin decided it first.
@@ -258,6 +261,8 @@ export function decideRefundRequest(
       .get();
 
     if (!decided) return false;
+
+    if (approved) withdrawInvitationsOnRefund(tx, purchase.id);
 
     if (
       approved &&
