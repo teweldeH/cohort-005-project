@@ -15,6 +15,7 @@ import {
 import {
   checkRefundEligibility,
   isTeamPurchase,
+  type Learning,
   type RefundDecisionOutcome,
 } from "~/lib/refunds";
 
@@ -44,7 +45,8 @@ export function getRefundRequestStatus(purchaseId: number) {
   return request?.status ?? null;
 }
 
-function getLessonIdsForCourse(courseId: number): number[] {
+/** The ids of every lesson in a course. */
+export function getLessonIdsForCourse(courseId: number): number[] {
   const rows = db
     .select({ id: lessons.id })
     .from(lessons)
@@ -55,7 +57,8 @@ function getLessonIdsForCourse(courseId: number): number[] {
   return rows.map((row) => row.id);
 }
 
-function getCompletedLessonCount(userId: number, lessonIds: number[]) {
+/** How many of the given lessons a user has completed. */
+export function getCompletedLessonCount(userId: number, lessonIds: number[]) {
   if (lessonIds.length === 0) return 0;
 
   const result = db
@@ -75,7 +78,7 @@ function getCompletedLessonCount(userId: number, lessonIds: number[]) {
 
 // Watched time is the furthest point reached in each lesson, added up, so
 // rewatching a lesson doesn't count twice.
-function getSecondsWatched(userId: number, lessonIds: number[]) {
+export function getSecondsWatched(userId: number, lessonIds: number[]) {
   if (lessonIds.length === 0) return 0;
 
   const furthestPerLesson = db
@@ -120,17 +123,20 @@ export function getUsage(purchaseId: number, buyerId: number, courseId: number) 
     return { kind: "team" as const, ...seatCounts };
   }
 
-  return { kind: "own" as const, ...getBuyerLearning(buyerId, courseId) };
+  return { kind: "own" as const, ...getLearning(buyerId, courseId) };
 }
 
-/** How much of a course its Buyer has taken, as Refund Eligibility measures it. */
-function getBuyerLearning(buyerId: number, courseId: number) {
+/**
+ * How much of a course a learner has taken, as the Own Purchase limits
+ * measure it.
+ */
+export function getLearning(userId: number, courseId: number): Learning {
   const lessonIds = getLessonIdsForCourse(courseId);
 
   return {
     lessonCount: lessonIds.length,
-    completedLessonCount: getCompletedLessonCount(buyerId, lessonIds),
-    secondsWatched: getSecondsWatched(buyerId, lessonIds),
+    completedLessonCount: getCompletedLessonCount(userId, lessonIds),
+    secondsWatched: getSecondsWatched(userId, lessonIds),
   };
 }
 
