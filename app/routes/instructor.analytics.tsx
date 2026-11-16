@@ -203,18 +203,21 @@ type CourseCountryRevenue = {
   rows: CountryRevenueRow[];
 };
 
-function scopeOn(
-  dateColumn: SQLiteColumn,
-  instructorId: number | null,
-  range: AnalyticsRange
-) {
+/** Whose figures, over which range, as of when. Null means platform-wide. */
+type AnalyticsScope = {
+  instructorId: number | null;
+  range: AnalyticsRange;
+  now: Date;
+};
+
+function scopeOn(dateColumn: SQLiteColumn, scope: AnalyticsScope) {
   const conditions = [];
 
-  if (instructorId !== null) {
-    conditions.push(eq(courses.instructorId, instructorId));
+  if (scope.instructorId !== null) {
+    conditions.push(eq(courses.instructorId, scope.instructorId));
   }
 
-  const start = rangeStart(range);
+  const start = rangeStart(scope.range, scope.now);
   if (start !== null) {
     conditions.push(gte(dateColumn, start));
   }
@@ -222,12 +225,12 @@ function scopeOn(
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
-function purchaseScope(instructorId: number | null, range: AnalyticsRange) {
-  return scopeOn(purchases.createdAt, instructorId, range);
+function purchaseScope(scope: AnalyticsScope) {
+  return scopeOn(purchases.createdAt, scope);
 }
 
-function sinceRange(dateColumn: SQLiteColumn, range: AnalyticsRange) {
-  const start = rangeStart(range);
+function sinceRange(dateColumn: SQLiteColumn, scope: AnalyticsScope) {
+  const start = rangeStart(scope.range, scope.now);
   return start === null ? undefined : gte(dateColumn, start);
 }
 
@@ -237,16 +240,13 @@ function ownedBy(instructorId: number | null) {
     : eq(courses.instructorId, instructorId);
 }
 
-function getStudentRevenue(
-  instructorId: number | null,
-  range: AnalyticsRange
-): StudentRevenue[] {
+function getStudentRevenue(scope: AnalyticsScope): StudentRevenue[] {
   const students = db
     .selectDistinct({ userId: users.id, name: users.name })
     .from(enrollments)
     .innerJoin(courses, eq(enrollments.courseId, courses.id))
     .innerJoin(users, eq(users.id, enrollments.userId))
-    .where(scopeOn(enrollments.enrolledAt, instructorId, range))
+    .where(scopeOn(enrollments.enrolledAt, scope))
     .orderBy(users.name)
     .all();
 
@@ -268,7 +268,7 @@ function getStudentRevenue(
       and(
         inArray(purchases.userId, studentIds),
         notExists(mintedSeats),
-        ownedBy(instructorId)
+        ownedBy(scope.instructorId)
       )
     )
     .groupBy(purchases.userId)
@@ -292,7 +292,10 @@ function getStudentRevenue(
     .innerJoin(courses, eq(purchases.courseId, courses.id))
     .innerJoin(seatCounts, eq(seatCounts.purchaseId, coupons.purchaseId))
     .where(
-      and(inArray(coupons.redeemedByUserId, studentIds), ownedBy(instructorId))
+      and(
+        inArray(coupons.redeemedByUserId, studentIds),
+        ownedBy(scope.instructorId)
+      )
     )
     .groupBy(coupons.redeemedByUserId)
     .all();
@@ -314,10 +317,7 @@ function getStudentRevenue(
 
 const TOP_BUYER_LIMIT = 10;
 
-function getTopBuyers(
-  instructorId: number | null,
-  range: AnalyticsRange
-): TopBuyer[] {
+function getTopBuyers(scope: AnalyticsScope): TopBuyer[] {
   const buyers = db
     .select({
       userId: users.id,
@@ -329,7 +329,7 @@ function getTopBuyers(
     .from(purchases)
     .innerJoin(courses, eq(purchases.courseId, courses.id))
     .innerJoin(users, eq(users.id, purchases.userId))
-    .where(purchaseScope(instructorId, range))
+    .where(purchaseScope(scope))
     .groupBy(users.id)
     .orderBy(desc(sum(purchases.amountPaid)))
     .limit(TOP_BUYER_LIMIT)
@@ -351,12 +351,7 @@ function getTopBuyers(
     .from(coupons)
     .innerJoin(purchases, eq(coupons.purchaseId, purchases.id))
     .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(
-      and(
-        inArray(purchases.userId, buyerIds),
-        purchaseScope(instructorId, range)
-      )
-    )
+    .where(and(inArray(purchases.userId, buyerIds), purchaseScope(scope)))
     .groupBy(purchases.userId)
     .all();
 
@@ -369,7 +364,9 @@ function getTopBuyers(
       .selectDistinct({ userId: enrollments.userId })
       .from(enrollments)
       .innerJoin(courses, eq(enrollments.courseId, courses.id))
-      .where(and(inArray(enrollments.userId, buyerIds), ownedBy(instructorId)))
+      .where(
+        and(inArray(enrollments.userId, buyerIds), ownedBy(scope.instructorId))
+      )
       .all()
       .map((row) => row.userId)
   );
@@ -386,10 +383,7 @@ function getTopBuyers(
   }));
 }
 
-function getRatingSummary(
-  instructorId: number | null,
-  range: AnalyticsRange
-): RatingSummary {
+function getRatingSummary(scope: AnalyticsScope): RatingSummary {
   const row = db
     .select({
       average: sql<number | null>`avg(${courseRatings.rating})`,
@@ -397,7 +391,7 @@ function getRatingSummary(
     })
     .from(courseRatings)
     .innerJoin(courses, eq(courseRatings.courseId, courses.id))
-    .where(scopeOn(courseRatings.createdAt, instructorId, range))
+    .where(scopeOn(courseRatings.createdAt, scope))
     .get();
 
   if (!row || row.count === 0 || row.average === null) {
@@ -435,10 +429,8 @@ function bucketRange(
   return buckets;
 }
 
-function getRevenueOverTime(
-  instructorId: number | null,
-  range: AnalyticsRange
-): RevenueSeries {
+function getRevenueOverTime(scope: AnalyticsScope): RevenueSeries {
+  const { range } = scope;
   const granularity = range === "all" ? "month" : "day";
   const bucketExpr = sql<string>`substr(${purchases.createdAt}, 1, ${
     granularity === "day" ? 10 : 7
@@ -448,7 +440,7 @@ function getRevenueOverTime(
     .select({ bucket: bucketExpr, gross: sum(purchases.amountPaid) })
     .from(purchases)
     .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(purchaseScope(instructorId, range))
+    .where(purchaseScope(scope))
     .groupBy(bucketExpr)
     .orderBy(bucketExpr)
     .all();
@@ -459,14 +451,13 @@ function getRevenueOverTime(
     rows.map((row) => [row.bucket, Number(row.gross ?? 0)])
   );
 
-  const now = new Date().toISOString();
   // A fixed range always spans its whole window, even before the first sale;
   // all time can only start where the data does.
-  const start = rangeStart(range) ?? rows[0].bucket;
+  const start = rangeStart(range, scope.now) ?? rows[0].bucket;
 
   const points = bucketRange(
     bucketOf(start, granularity),
-    bucketOf(now, granularity),
+    bucketOf(scope.now.toISOString(), granularity),
     granularity
   ).map((bucket) => {
     const { grossCents, netCents } = splitRevenue(
@@ -654,7 +645,7 @@ function getCourseDropOff(courseId: number): CourseFunnel {
 
 function getCourseQuizPassRates(
   courseId: number,
-  range: AnalyticsRange
+  scope: AnalyticsScope
 ): QuizPassRate[] {
   const quizRows = db
     .select({
@@ -690,7 +681,7 @@ function getCourseQuizPassRates(
     .where(
       and(
         inArray(quizAttempts.quizId, quizIds),
-        sinceRange(quizAttempts.attemptedAt, range)
+        sinceRange(quizAttempts.attemptedAt, scope)
       )
     )
     .groupBy(quizAttempts.quizId, quizAttempts.userId)
@@ -736,7 +727,7 @@ function getCourseQuizPassRates(
 
 function getCourseRevenueByCountry(
   courseId: number,
-  range: AnalyticsRange
+  scope: AnalyticsScope
 ): CourseCountryRevenue {
   const rows = db
     .select({
@@ -748,7 +739,7 @@ function getCourseRevenueByCountry(
     .where(
       and(
         eq(purchases.courseId, courseId),
-        sinceRange(purchases.createdAt, range)
+        sinceRange(purchases.createdAt, scope)
       )
     )
     .groupBy(purchases.country)
@@ -800,6 +791,8 @@ function getCourseRevenueByCountry(
 }
 
 export async function loader({ request, url }: Route.LoaderArgs) {
+  // The only read of the clock for this request: every panel agrees on "today".
+  const now = new Date();
   const { userId, isAdmin } = await requireInstructorOrAdmin(request);
 
   const range = parseAnalyticsRange(url.searchParams.get("range"));
@@ -811,6 +804,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
   const instructorId = isAdmin
     ? parseId(url.searchParams.get("instructor"))
     : userId;
+  const scope: AnalyticsScope = { instructorId, range, now };
 
   // The selector lists every course the viewer owns rather than only the ones
   // that sold: a course nobody is finishing is exactly what this tab is for.
@@ -833,7 +827,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
   // Unanswered questions. A question qualifies when it is top-level, not
   // deleted, not written by staff, and has no reply from the course's
   // instructor or an admin.
-  const questionsSince = rangeStart(range);
+  const questionsSince = rangeStart(range, now);
   const questionAuthor = alias(users, "author");
   const reply = alias(comments, "reply");
   const replyAuthor = alias(users, "reply_author");
@@ -898,7 +892,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     })
     .from(purchases)
     .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(purchaseScope(instructorId, range))
+    .where(purchaseScope(scope))
     .get();
 
   // sum() returns null over an empty set, and a string when SQLite has rows.
@@ -918,7 +912,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     })
     .from(purchases)
     .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(purchaseScope(instructorId, range))
+    .where(purchaseScope(scope))
     .groupBy(courses.id)
     .all();
 
@@ -938,10 +932,10 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     .select({ buyerCount: countDistinct(purchases.userId) })
     .from(purchases)
     .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(purchaseScope(instructorId, range))
+    .where(purchaseScope(scope))
     .get();
 
-  const students = getStudentRevenue(instructorId, range);
+  const students = getStudentRevenue(scope);
   const attributedRevenue = students.reduce(
     (total, student) => total + student.revenueCents,
     0
@@ -996,13 +990,13 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     })
     .from(purchases)
     .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(purchaseScope(instructorId, range))
+    .where(purchaseScope(scope))
     .all();
 
   const refundExposure = computeRefundExposure(
     exposureRows,
     summary.grossCents,
-    new Date()
+    now
   );
 
   return {
@@ -1010,15 +1004,15 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     // it are still reported, because months of silence is the urgent case.
     questions,
     audience,
-    buyers: getTopBuyers(instructorId, range),
-    ratings: getRatingSummary(instructorId, range),
+    buyers: getTopBuyers(scope),
+    ratings: getRatingSummary(scope),
     tab,
     range,
     isAdmin,
     instructorId,
     selectedCourseId,
     summary,
-    series: getRevenueOverTime(instructorId, range),
+    series: getRevenueOverTime(scope),
     courses: courseRevenue,
     courseOptions,
     // Progress and drop-off carry no usable timestamp, so they span all time
@@ -1034,11 +1028,11 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     quizzes:
       selectedCourseId === null
         ? null
-        : getCourseQuizPassRates(selectedCourseId, range),
+        : getCourseQuizPassRates(selectedCourseId, scope),
     countries:
       selectedCourseId === null
         ? null
-        : getCourseRevenueByCountry(selectedCourseId, range),
+        : getCourseRevenueByCountry(selectedCourseId, scope),
     instructors,
     refundExposure,
     unpublished: instructorId !== null && publishedRow === undefined,
