@@ -143,7 +143,7 @@ function isUserEnrolled(userId: number, courseId: number) {
       and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
     )
     .get();
-  return !!enrollment;
+  return Boolean(enrollment);
 }
 
 function getCourseLessonIds(courseId: number): number[] {

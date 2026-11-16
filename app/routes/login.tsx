@@ -116,7 +116,7 @@ export default function Login({ loaderData }: Route.ComponentProps) {
                   type="email"
                   placeholder="you@example.com"
                   defaultValue={email}
-                  aria-invalid={!!actionData?.errors?.email}
+                  aria-invalid={Boolean(actionData?.errors?.email)}
                 />
                 {actionData?.errors?.email && (
                   <p className="mt-1 text-sm text-destructive">

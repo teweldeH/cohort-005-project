@@ -121,7 +121,7 @@ export default function SignUp({ loaderData }: Route.ComponentProps) {
                   type="text"
                   placeholder="Your name"
                   defaultValue={actionData?.values?.name ?? ""}
-                  aria-invalid={!!actionData?.errors?.name}
+                  aria-invalid={Boolean(actionData?.errors?.name)}
                 />
                 {actionData?.errors?.name && (
                   <p className="mt-1 text-sm text-destructive">
@@ -143,7 +143,7 @@ export default function SignUp({ loaderData }: Route.ComponentProps) {
                   type="email"
                   placeholder="you@example.com"
                   defaultValue={actionData?.values?.email ?? loaderData.prefillEmail}
-                  aria-invalid={!!actionData?.errors?.email}
+                  aria-invalid={Boolean(actionData?.errors?.email)}
                 />
                 {actionData?.errors?.email && (
                   <p className="mt-1 text-sm text-destructive">

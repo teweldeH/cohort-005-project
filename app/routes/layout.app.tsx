@@ -189,7 +189,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     devCountry,
     countryTierInfo,
     countries: COUNTRIES,
-    hasTeamPurchases: currentUserId ? !!getTeamForBuyer(currentUserId) : false,
+    hasTeamPurchases: currentUserId ? Boolean(getTeamForBuyer(currentUserId)) : false,
   };
 }
 

@@ -1161,7 +1161,7 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
               startPosition={lastWatchPosition}
               durationMinutes={lesson.durationMinutes}
               watchProgress={watchProgress}
-              trackingEnabled={enrolled && !!currentUserId}
+              trackingEnabled={enrolled && Boolean(currentUserId)}
               autoplay={autoplay}
               onToggleAutoplay={toggleAutoplay}
             />

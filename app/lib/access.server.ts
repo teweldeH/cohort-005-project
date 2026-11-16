@@ -31,7 +31,7 @@ function findEnrollment(userId: number, courseId: number) {
 }
 
 function isUserEnrolled(userId: number, courseId: number) {
-  return !!findEnrollment(userId, courseId);
+  return Boolean(findEnrollment(userId, courseId));
 }
 
 function findPurchase(userId: number, courseId: number) {

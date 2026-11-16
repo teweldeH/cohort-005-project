@@ -35,7 +35,7 @@ export function isCountryMismatch(
   purchase: { country: string | null },
   country: string | null
 ) {
-  return !!purchase.country && purchase.country !== (country ?? "");
+  return Boolean(purchase.country) && purchase.country !== (country ?? "");
 }
 
 /**
@@ -57,6 +57,7 @@ export function invitationFor(
     .get();
 
   return {
-    forViewer: !!user && normaliseEmail(user.email) === seat.invitedEmail,
+    forViewer:
+      user !== undefined && normaliseEmail(user.email) === seat.invitedEmail,
   };
 }

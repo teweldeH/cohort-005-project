@@ -178,7 +178,7 @@ export function isEnrollmentGivenElsewhere(
     )
     .get();
 
-  return !!otherOwnPurchase;
+  return Boolean(otherOwnPurchase);
 }
 
 export type RefundDecision =

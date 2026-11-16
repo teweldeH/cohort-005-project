@@ -120,7 +120,7 @@ function isUserEnrolled(userId: number, courseId: number) {
     )
     .get();
 
-  return !!existing;
+  return Boolean(existing);
 }
 
 function getLessonProgressForCourse(userId: number, courseId: number) {
@@ -358,7 +358,7 @@ export default function ModuleDetail({ loaderData }: Route.ComponentProps) {
             const status = lessonProgressMap[lesson.id];
             const isCompleted = status === LessonProgressStatus.Completed;
             const isInProgress = status === LessonProgressStatus.InProgress;
-            const hasVideo = !!lesson.videoUrl;
+            const hasVideo = Boolean(lesson.videoUrl);
 
             const content = (
               <div className="flex items-center gap-3 rounded-md px-3 py-3 text-sm">

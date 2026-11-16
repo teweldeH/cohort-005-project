@@ -291,7 +291,7 @@ export default function InstructorModulePreview({
       ) : (
         <div className="space-y-1">
           {mod.lessons.map((lesson) => {
-            const hasVideo = !!lesson.videoUrl;
+            const hasVideo = Boolean(lesson.videoUrl);
 
             return (
               <Link

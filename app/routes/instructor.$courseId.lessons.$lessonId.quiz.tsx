@@ -267,7 +267,7 @@ function createOption(
 
 export function meta({ loaderData }: Route.MetaArgs) {
   const lessonTitle = loaderData?.lesson?.title ?? "Lesson";
-  const hasQuiz = !!loaderData?.existingQuiz;
+  const hasQuiz = Boolean(loaderData?.existingQuiz);
   return [
     {
       title: `${hasQuiz ? "Edit" : "Create"} Quiz: ${lessonTitle} — Cadence`,
@@ -513,7 +513,7 @@ export default function QuizBuilderWizard({
     };
   });
 
-  const isEditing = !!existingQuiz;
+  const isEditing = Boolean(existingQuiz);
 
   // Toast on success
   const fetcherData = fetcher.data as

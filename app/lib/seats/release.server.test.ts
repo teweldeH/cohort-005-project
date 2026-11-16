@@ -39,7 +39,7 @@ function rosterSeats(buyerId = base.user.id) {
 }
 
 function isEnrolled(userId: number, courseId = base.course.id) {
-  return !!testDb
+  return Boolean(testDb
     .select()
     .from(schema.enrollments)
     .where(
@@ -48,7 +48,7 @@ function isEnrolled(userId: number, courseId = base.course.id) {
         eq(schema.enrollments.courseId, courseId)
       )
     )
-    .get();
+    .get());
 }
 
 /** A Team Purchase whose first Seat `holder` has claimed through its link. */

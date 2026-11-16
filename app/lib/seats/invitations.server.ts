@@ -40,7 +40,7 @@ function isDuplicateInvitation(
     )
     .get();
 
-  return !!existing;
+  return Boolean(existing);
 }
 
 /**

@@ -8,11 +8,13 @@ export function isUserEnrolled(
   courseId: number,
   tx: DbOrTransaction = db
 ) {
-  return !!tx
-    .select({ id: enrollments.id })
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
+  return Boolean(
+    tx
+      .select({ id: enrollments.id })
+      .from(enrollments)
+      .where(
+        and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
+      )
+      .get()
+  );
 }

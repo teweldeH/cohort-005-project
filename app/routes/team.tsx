@@ -315,7 +315,7 @@ function InviteForm({ seatId }: { seatId: number }) {
           name="email"
           required
           aria-label="Email to invite"
-          aria-invalid={!!error}
+          aria-invalid={Boolean(error)}
           placeholder="name@company.com"
           className="w-48 rounded-md border border-input bg-background px-2 py-1 text-sm"
         />
