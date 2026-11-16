@@ -2,16 +2,13 @@ import { useState } from "react";
 import { Link, useFetcher, useNavigate } from "react-router";
 import { toast } from "sonner";
 import type { Route } from "./+types/instructor.$courseId.lessons.$lessonId.quiz";
-import { getCurrentUserId } from "~/lib/session";
 import { mayManageCourse } from "~/modules/course-permissions/permissions.server";
 import {
   enforce,
   requireViewer,
 } from "~/modules/course-permissions/route.server";
 import {
-  UserRole,
   QuestionType,
-  users,
   courses,
   modules,
   lessons,
@@ -116,10 +113,6 @@ interface WizardState {
 
 function generateId() {
   return Math.random().toString(36).slice(2, 10);
-}
-
-function getUserById(id: number) {
-  return db.select().from(users).where(eq(users.id, id)).get();
 }
 
 function getCourseById(id: number) {
@@ -324,31 +317,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 // ─── Action ───
 
 export async function action({ params, request }: Route.ActionArgs) {
-  const currentUserId = await getCurrentUserId(request);
-
-  if (!currentUserId) {
-    throw data("You must be logged in.", { status: 401 });
-  }
-
-  const user = getUserById(currentUserId);
-  if (
-    !user ||
-    (user.role !== UserRole.Instructor && user.role !== UserRole.Admin)
-  ) {
-    throw data("Only instructors and admins can manage quizzes.", {
-      status: 403,
-    });
-  }
+  const viewer = await requireViewer(request);
 
   const { courseId, lessonId } = parseParams(params, quizParamsSchema);
 
-  const course = getCourseById(courseId);
-  if (
-    !course ||
-    (course.instructorId !== currentUserId && user.role !== UserRole.Admin)
-  ) {
-    throw data("Course not found or not yours.", { status: 403 });
-  }
+  enforce(mayManageCourse(viewer, courseId));
 
   const lesson = getLessonById(lessonId);
   if (!lesson) {
