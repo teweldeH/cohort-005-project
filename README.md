@@ -55,7 +55,7 @@ cd cohort-005-project
 # 2. Fork it into your own GitHub repo
 npx ai-hero-cli fork
 
-# 3. Install dependencies
+# 3. Install dependencies (also turns on the pre-commit hook)
 npm install
 
 # 4. Run database migrations and seed data
@@ -146,6 +146,14 @@ better-sqlite3's native binding was never built. This usually means `ignore-scri
 
 ```bash
 npm rebuild better-sqlite3 --ignore-scripts=false
+```
+
+### Commits don't run the checks
+
+Every commit should run `npm run check` first (the pre-commit hook in `.githooks/`). `npm install` turns the hook on, so it stays off if your npm config has `ignore-scripts=true` or your clone predates the hook. Turn it on:
+
+```bash
+npm run prepare
 ```
 
 ## Tech Stack
