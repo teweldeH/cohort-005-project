@@ -2,6 +2,8 @@
 
 Run `npm run check` before you report a change to `app/` as complete. CI runs the same command on every PR.
 
+The pre-commit hook runs `npm run check` too and refuses the commit if it fails. Never commit with `--no-verify`: fix the cause instead.
+
 ## When something breaks
 
 | Symptom                                         | Cause                                                                                                  |
