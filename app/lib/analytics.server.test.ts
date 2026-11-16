@@ -3,7 +3,12 @@ import { createTestDb, seedBaseData, type TestDb } from "~/test/setup";
 import * as schema from "~/db/schema";
 import { CourseStatus, LessonProgressStatus, UserRole } from "~/db/schema";
 import { markdown } from "~/lib/text";
-import { getCourseAnalytics } from "./analytics.server";
+import {
+  getAnalyticsOverview,
+  getCourseAnalytics,
+  listAnalyticsInstructors,
+  type AnalyticsScope,
+} from "./analytics.server";
 
 const NOW = new Date("2026-10-20T12:00:00.000Z");
 
@@ -31,7 +36,11 @@ function addUser(name: string, role = UserRole.Student) {
     .get();
 }
 
-function addCourse(title: string, instructorId: number) {
+function addCourse(
+  title: string,
+  instructorId: number,
+  status = CourseStatus.Published
+) {
   return db
     .insert(schema.courses)
     .values({
@@ -41,7 +50,7 @@ function addCourse(title: string, instructorId: number) {
       salesCopy: markdown(title),
       instructorId,
       categoryId: base.category.id,
-      status: CourseStatus.Published,
+      status,
     })
     .returning()
     .get();
@@ -356,5 +365,324 @@ describe("getCourseAnalytics", () => {
         ],
       });
     });
+  });
+});
+
+describe("getAnalyticsOverview", () => {
+  it("counts only the instructor's own sales, or everyone's platform-wide", () => {
+    const other = addInstructorWithCourse("Other Instructor", "Their Course");
+    buy(base.user.id, base.course.id, 10000);
+    buy(base.user.id, other.course.id, 5000);
+
+    const own = getAnalyticsOverview(db, {
+      instructorId: base.instructor.id,
+      range: "30d",
+      now: NOW,
+    });
+    const platform = getAnalyticsOverview(db, {
+      instructorId: null,
+      range: "30d",
+      now: NOW,
+    });
+
+    expect(own.summary).toEqual({
+      grossCents: 10000,
+      feeCents: 2000,
+      netCents: 8000,
+      purchaseCount: 1,
+    });
+    expect(platform.summary).toEqual({
+      grossCents: 15000,
+      feeCents: 3000,
+      netCents: 12000,
+      purchaseCount: 2,
+    });
+  });
+
+  function overview(scope: Partial<AnalyticsScope> = {}) {
+    return getAnalyticsOverview(db, {
+      instructorId: base.instructor.id,
+      range: "30d",
+      now: NOW,
+      ...scope,
+    });
+  }
+
+  it("leaves purchases from before the range out of the summary", () => {
+    buy(base.user.id, base.course.id, 10000, { days: 1 });
+    buy(base.user.id, base.course.id, 4000, { days: 3 });
+    buy(base.user.id, base.course.id, 6000, { days: 10 });
+
+    expect(overview({ range: "7d" }).summary).toEqual({
+      grossCents: 14000,
+      feeCents: 2800,
+      netCents: 11200,
+      purchaseCount: 2,
+    });
+    expect(overview({ range: "all" }).summary.grossCents).toBe(20000);
+  });
+
+  it("charts every day of a fixed range up to today, sales or not", () => {
+    buy(base.user.id, base.course.id, 10000, { days: 1 });
+    buy(base.user.id, base.course.id, 4000, { days: 3 });
+
+    const series = overview({ range: "7d" }).series;
+
+    expect(series.granularity).toBe("day");
+    expect(series.points).toEqual([
+      { bucket: "2026-10-13", grossCents: 0, netCents: 0 },
+      { bucket: "2026-10-14", grossCents: 0, netCents: 0 },
+      { bucket: "2026-10-15", grossCents: 0, netCents: 0 },
+      { bucket: "2026-10-16", grossCents: 0, netCents: 0 },
+      { bucket: "2026-10-17", grossCents: 4000, netCents: 3200 },
+      { bucket: "2026-10-18", grossCents: 0, netCents: 0 },
+      { bucket: "2026-10-19", grossCents: 10000, netCents: 8000 },
+      { bucket: "2026-10-20", grossCents: 0, netCents: 0 },
+    ]);
+  });
+
+  it("charts all time by month from the first sale, and nothing with no sales", () => {
+    expect(overview({ range: "all" }).series).toEqual({
+      granularity: "month",
+      points: [],
+    });
+
+    buy(base.user.id, base.course.id, 5000, { days: 70 });
+    buy(base.user.id, base.course.id, 1000, { days: 1 });
+
+    expect(overview({ range: "all" }).series.points).toEqual([
+      { bucket: "2026-08", grossCents: 5000, netCents: 4000 },
+      { bucket: "2026-09", grossCents: 0, netCents: 0 },
+      { bucket: "2026-10", grossCents: 1000, netCents: 800 },
+    ]);
+  });
+
+  it("breaks revenue down by course, biggest earner first", () => {
+    const second = addCourse("Second Course", base.instructor.id);
+    addCourse("Unsold Course", base.instructor.id);
+    buy(base.user.id, base.course.id, 3000);
+    buy(base.user.id, second.id, 8000);
+    buy(base.user.id, second.id, 2000);
+
+    expect(overview().courses).toEqual([
+      {
+        courseId: second.id,
+        title: "Second Course",
+        grossCents: 10000,
+        feeCents: 2000,
+        netCents: 8000,
+        purchaseCount: 2,
+      },
+      {
+        courseId: base.course.id,
+        title: "Test Course",
+        grossCents: 3000,
+        feeCents: 600,
+        netCents: 2400,
+        purchaseCount: 1,
+      },
+    ]);
+  });
+
+  describe("with a team licence", () => {
+    let individual: { id: number };
+    let teamAdmin: { id: number };
+
+    beforeEach(() => {
+      // One Individual Purchase, and a Team Licence of three Seats of which
+      // two are claimed. The Team Admin buys but never enrols.
+      individual = addUser("Ivy Individual");
+      teamAdmin = addUser("Tess Team");
+      const claimers = [addUser("Sam Seat"), addUser("Sid Seat")];
+
+      buy(individual.id, base.course.id, 10000);
+      enrol(individual.id, base.course.id);
+
+      const licence = buy(teamAdmin.id, base.course.id, 9000);
+      const team = db.insert(schema.teams).values({}).returning().get();
+      [...claimers, null].forEach((claimer, index) => {
+        db.insert(schema.coupons)
+          .values({
+            teamId: team.id,
+            courseId: base.course.id,
+            code: `SEAT-${index}`,
+            purchaseId: licence.id,
+            redeemedByUserId: claimer?.id ?? null,
+            redeemedAt: claimer ? daysAgo(1) : null,
+          })
+          .run();
+        if (claimer) enrol(claimer.id, base.course.id);
+      });
+    });
+
+    it("counts buyers and students apart, splitting a licence across its seats", () => {
+      // Students: 10000, 3000 and 3000 — a third of the licence each.
+      expect(overview().audience).toEqual({
+        buyerCount: 2,
+        studentCount: 3,
+        revenuePerStudentCents: 5333,
+      });
+    });
+
+    it("doesn't credit a Team Admin who enrols with their licence's money", () => {
+      // The licence paid for other people's seats, so it stays split across
+      // them: 10000, 3000, 3000 and 0 over four students.
+      enrol(teamAdmin.id, base.course.id);
+
+      expect(overview().audience).toEqual({
+        buyerCount: 2,
+        studentCount: 4,
+        revenuePerStudentCents: 4000,
+      });
+    });
+
+    it("ranks top buyers by spend, with their seats and enrolment", () => {
+      expect(overview().buyers).toEqual([
+        {
+          userId: individual.id,
+          name: "Ivy Individual",
+          email: "ivy.individual@example.com",
+          spendCents: 10000,
+          purchaseCount: 1,
+          seatsBought: 0,
+          seatsUnredeemed: 0,
+          enrolled: true,
+        },
+        {
+          userId: teamAdmin.id,
+          name: "Tess Team",
+          email: "tess.team@example.com",
+          spendCents: 9000,
+          purchaseCount: 1,
+          seatsBought: 3,
+          seatsUnredeemed: 1,
+          enrolled: false,
+        },
+      ]);
+    });
+  });
+
+  it("reports no students and no per-student figure with nobody enrolled", () => {
+    expect(overview().audience).toEqual({
+      buyerCount: 0,
+      studentCount: 0,
+      revenuePerStudentCents: null,
+    });
+  });
+
+  it("averages ratings in the range to one decimal place", () => {
+    const other = addInstructorWithCourse("Other Instructor", "Their Course");
+    const rate = (courseId: number, rating: number, days: number) =>
+      db
+        .insert(schema.courseRatings)
+        .values({
+          userId: addUser(`Rater ${courseId}-${rating}-${days}`).id,
+          courseId,
+          rating,
+          createdAt: daysAgo(days),
+        })
+        .run();
+
+    expect(overview().ratings).toEqual({ average: null, count: 0 });
+
+    rate(base.course.id, 5, 1);
+    rate(base.course.id, 4, 1);
+    rate(base.course.id, 1, 60);
+    rate(other.course.id, 2, 1);
+
+    expect(overview().ratings).toEqual({ average: 4.5, count: 2 });
+    expect(overview({ range: "all" }).ratings).toEqual({
+      average: 3.3,
+      count: 3,
+    });
+  });
+
+  it("counts unanswered student questions, splitting off ones older than the range", () => {
+    const module = addModule(base.course.id, "Module", 1);
+    const lesson = addLesson(module.id, "Lesson", 1);
+    const admin = addUser("Ada Admin", UserRole.Admin);
+    const classmate = addUser("Cal Classmate");
+
+    const comment = (
+      userId: number,
+      days: number,
+      extra: { parentId?: number; deletedAt?: string } = {}
+    ) =>
+      db
+        .insert(schema.comments)
+        .values({
+          lessonId: lesson.id,
+          userId,
+          body: markdown("?"),
+          createdAt: daysAgo(days),
+          ...extra,
+        })
+        .returning()
+        .get();
+
+    // Unanswered: no reply, a staff reply that was deleted, a classmate's reply.
+    comment(base.user.id, 1);
+    const deletedReply = comment(base.user.id, 1);
+    comment(admin.id, 1, { parentId: deletedReply.id, deletedAt: daysAgo(0) });
+    const classmateReply = comment(base.user.id, 1);
+    comment(classmate.id, 1, { parentId: classmateReply.id });
+    // Unanswered, but from before the range.
+    comment(base.user.id, 60);
+
+    // Not questions that need answering.
+    const answered = comment(base.user.id, 1);
+    comment(base.instructor.id, 1, { parentId: answered.id });
+    const answeredByAdmin = comment(base.user.id, 1);
+    comment(admin.id, 1, { parentId: answeredByAdmin.id });
+    comment(base.instructor.id, 1);
+    comment(admin.id, 1);
+    comment(base.user.id, 1, { deletedAt: daysAgo(0) });
+
+    expect(overview().questions).toEqual({ inRange: 3, older: 1 });
+    expect(overview({ range: "all" }).questions).toEqual({
+      inRange: 4,
+      older: 0,
+    });
+  });
+
+  it("flags an instructor with nothing published, but never the platform", () => {
+    const drafter = addUser("Drew Drafter", UserRole.Instructor);
+    addCourse("Draft Course", drafter.id, CourseStatus.Draft);
+
+    expect(overview().unpublished).toBe(false);
+    expect(overview({ instructorId: drafter.id }).unpublished).toBe(true);
+    expect(overview({ instructorId: null }).unpublished).toBe(false);
+  });
+
+  it("reports the refund exposure as of the scope's now", () => {
+    buy(base.user.id, base.course.id, 3000, { days: 2 });
+    buy(base.user.id, base.course.id, 1000, { days: 20 });
+
+    const exposure = overview().refundExposure;
+
+    expect(exposure.grossCents).toBe(3000);
+    expect(exposure.sharePercent).toBe(75);
+    expect(exposure.courses).toEqual([
+      {
+        courseId: base.course.id,
+        title: "Test Course",
+        grossCents: 3000,
+        purchaseCount: 1,
+        daysLeft: 12,
+      },
+    ]);
+  });
+});
+
+describe("listAnalyticsInstructors", () => {
+  it("lists everyone who owns a course, admins included, by name", () => {
+    const admin = addUser("Ada Admin", UserRole.Admin);
+    addCourse("Admin Course", admin.id);
+    addUser("Idle Instructor", UserRole.Instructor);
+
+    expect(listAnalyticsInstructors(db)).toEqual([
+      { id: admin.id, name: "Ada Admin" },
+      { id: base.instructor.id, name: "Test Instructor" },
+    ]);
   });
 });
