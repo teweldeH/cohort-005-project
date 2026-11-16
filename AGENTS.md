@@ -1,6 +1,6 @@
 ## Verification checks
 
-Run `npm run check` before you report a change to `app/` as complete. It runs typecheck, then the tests, and CI runs the same command on every PR.
+Run `npm run check` before you report a change to `app/` as complete. CI runs the same command on every PR.
 
 ## When something breaks
 
