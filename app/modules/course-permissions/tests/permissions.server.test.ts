@@ -148,6 +148,28 @@ describe("take the course", () => {
           mayTakeCourse(viewer(world.user.id, "US"), course.id, world.db)
         ).toEqual(ALLOWED);
       });
+
+      it("checks a Team Admin against their Individual Purchase, not their Team Licence", () => {
+        const course = discountedCourse();
+        const teamAdmin = world.addUser(UserRole.Student);
+        world.buyTeamLicence(
+          teamAdmin.id,
+          course.id,
+          "IN",
+          "2026-01-01T00:00:00.000Z"
+        );
+        world.addPurchase(
+          teamAdmin.id,
+          course.id,
+          "US",
+          "2026-02-01T00:00:00.000Z"
+        );
+        world.enrol(teamAdmin.id, course.id);
+
+        expect(
+          mayTakeCourse(viewer(teamAdmin.id, "US"), course.id, world.db)
+        ).toEqual(ALLOWED);
+      });
     });
 
     it("exempts the owning Instructor and Platform Admins", () => {

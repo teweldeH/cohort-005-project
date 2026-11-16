@@ -2,6 +2,7 @@ import { and, eq, notExists } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "~/db/schema";
 import {
+  coupons,
   courses,
   enrollments,
   purchases,
@@ -139,6 +140,13 @@ function findCheckedPurchase(db: Db, userId: number, courseId: number) {
       and(
         eq(purchases.userId, userId),
         eq(purchases.courseId, courseId),
+        // An Individual Purchase: a Team Licence is the Purchase that granted Seats.
+        notExists(
+          db
+            .select({ id: coupons.id })
+            .from(coupons)
+            .where(eq(coupons.purchaseId, purchases.id))
+        ),
         notExists(
           db
             .select({ id: refunds.id })

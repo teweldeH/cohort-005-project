@@ -81,6 +81,46 @@ export function createWorld() {
       .run();
   }
 
+  /** A Team Licence with one Unclaimed Seat, bought by a Team Admin. */
+  function buyTeamLicence(
+    teamAdminId: number,
+    courseId: number,
+    country: string | null,
+    createdAt?: string
+  ) {
+    const team = db.insert(schema.teams).values({}).returning().get();
+    db.insert(schema.teamMembers)
+      .values({
+        teamId: team.id,
+        userId: teamAdminId,
+        role: schema.TeamMemberRole.Admin,
+      })
+      .run();
+    const purchase = addPurchase(teamAdminId, courseId, country, createdAt);
+    const seat = db
+      .insert(schema.coupons)
+      .values({
+        teamId: team.id,
+        courseId,
+        code: `SEAT-${purchase.id}`,
+        purchaseId: purchase.id,
+      })
+      .returning()
+      .get();
+    return { purchase, seat };
+  }
+
+  /** Claim a Seat, which gives the Student an Enrollment. */
+  function claimSeat(seatId: number, userId: number) {
+    const seat = db
+      .update(schema.coupons)
+      .set({ redeemedByUserId: userId, redeemedAt: new Date().toISOString() })
+      .where(eq(schema.coupons.id, seatId))
+      .returning()
+      .get();
+    enrol(userId, seat.courseId);
+  }
+
   function deleteUser(userId: number) {
     db.delete(schema.users).where(eq(schema.users.id, userId)).run();
   }
@@ -101,6 +141,8 @@ export function createWorld() {
     buy,
     addPurchase,
     approveRefund,
+    buyTeamLicence,
+    claimSeat,
     deleteUser,
     setRole,
   };
