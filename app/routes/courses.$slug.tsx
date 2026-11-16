@@ -49,6 +49,7 @@ import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
 import { StarRating, StarRatingInput } from "~/components/star-rating";
 import { PurchaseCountryNotice } from "~/components/purchase-country-notice";
 import { mayTakeCourse } from "~/modules/course-permissions/permissions.server";
+import { signedOutMessage } from "~/modules/course-permissions/messages";
 import {
   enforce,
   getViewer,
@@ -1096,10 +1097,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         "The course you're looking for doesn't exist or may have been removed.";
     } else if (error.status === 401) {
       title = "Sign in required";
-      message =
-        typeof error.data === "string"
-          ? error.data
-          : "Please select a user from the DevUI panel.";
+      message = typeof error.data === "string" ? error.data : signedOutMessage;
     } else {
       title = `Error ${error.status}`;
       message = typeof error.data === "string" ? error.data : error.statusText;

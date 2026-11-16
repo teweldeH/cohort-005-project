@@ -7,6 +7,7 @@ import {
   requireCourseManager,
   requireInstructorOrAdmin,
 } from "~/modules/course-permissions/route.server";
+import { signedOutMessage } from "~/modules/course-permissions/messages";
 import { renderComment } from "~/lib/comment-markdown.server";
 import { createComment } from "~/lib/comments.server";
 import { defaultNotifications } from "~/lib/notifications.server";
@@ -377,10 +378,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   if (isRouteErrorResponse(error)) {
     if (error.status === 401) {
       title = "Sign in required";
-      message =
-        typeof error.data === "string"
-          ? error.data
-          : "Please select a user from the DevUI panel.";
+      message = typeof error.data === "string" ? error.data : signedOutMessage;
     } else if (error.status === 403) {
       title = "Not allowed";
       message =

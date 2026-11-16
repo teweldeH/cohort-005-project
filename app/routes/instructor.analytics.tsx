@@ -2,6 +2,7 @@ import { Link, isRouteErrorResponse, useSearchParams } from "react-router";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import type { Route } from "./+types/instructor.analytics";
 import { requireInstructorOrAdmin } from "~/modules/course-permissions/route.server";
+import { signedOutMessage } from "~/modules/course-permissions/messages";
 import {
   getAnalyticsOverview,
   getCourseAnalytics,
@@ -1066,10 +1067,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   if (isRouteErrorResponse(error)) {
     if (error.status === 401) {
       title = "Sign in required";
-      message =
-        typeof error.data === "string"
-          ? error.data
-          : "Please select a user from the DevUI panel.";
+      message = typeof error.data === "string" ? error.data : signedOutMessage;
     } else if (error.status === 403) {
       title = "Not allowed";
       message =

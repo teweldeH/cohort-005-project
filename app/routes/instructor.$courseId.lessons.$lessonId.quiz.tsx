@@ -3,6 +3,7 @@ import { Link, useFetcher, useNavigate } from "react-router";
 import { toast } from "sonner";
 import type { Route } from "./+types/instructor.$courseId.lessons.$lessonId.quiz";
 import { mayManageCourse } from "~/modules/course-permissions/permissions.server";
+import { signedOutMessage } from "~/modules/course-permissions/messages";
 import {
   enforce,
   requireViewer,
@@ -1138,10 +1139,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       message = "The quiz, lesson, or course you're looking for doesn't exist.";
     } else if (error.status === 401) {
       title = "Sign in required";
-      message =
-        typeof error.data === "string"
-          ? error.data
-          : "Please select a user from the DevUI panel.";
+      message = typeof error.data === "string" ? error.data : signedOutMessage;
     } else if (error.status === 403) {
       title = "Access denied";
       message =

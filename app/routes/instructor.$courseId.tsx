@@ -9,6 +9,7 @@ import {
 } from "@hello-pangea/dnd";
 import type { Route } from "./+types/instructor.$courseId";
 import { mayManageCourse } from "~/modules/course-permissions/permissions.server";
+import { signedOutMessage } from "~/modules/course-permissions/messages";
 import {
   enforce,
   requireViewer,
@@ -2201,10 +2202,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         "The course you're looking for doesn't exist or may have been removed.";
     } else if (error.status === 401) {
       title = "Sign in required";
-      message =
-        typeof error.data === "string"
-          ? error.data
-          : "Please select a user from the DevUI panel.";
+      message = typeof error.data === "string" ? error.data : signedOutMessage;
     } else if (error.status === 403) {
       title = "Access denied";
       message =
