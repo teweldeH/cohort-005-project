@@ -386,9 +386,10 @@ export async function action({ params, request }: Route.ActionArgs) {
 
   if (intent === "delete-quiz") {
     const existingQuiz = getQuizByLessonId(lessonId);
-    if (existingQuiz) {
-      deleteQuiz(existingQuiz.id);
+    if (!existingQuiz) {
+      throw data("Quiz not found.", { status: 404 });
     }
+    deleteQuiz(existingQuiz.id);
     return { success: true, deleted: true };
   }
 
