@@ -2,7 +2,6 @@ import { Link, isRouteErrorResponse, useSearchParams } from "react-router";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import type { Route } from "./+types/instructor.analytics";
 import { requireInstructorOrAdmin } from "~/lib/access.server";
-import { db } from "~/db";
 import {
   getAnalyticsOverview,
   getCourseAnalytics,
@@ -13,17 +12,17 @@ import {
   type FunnelLesson,
   type QuizPassRate,
   type RevenueSeries,
-} from "~/lib/analytics.server";
+} from "~/modules/instructor-analytics/analytics.server";
 import {
   ANALYTICS_RANGES,
   PLATFORM_FEE_PERCENT,
   formatBucket,
   formatMoney,
   resolveAnalyticsView,
-} from "~/lib/analytics";
+} from "~/modules/instructor-analytics/analytics";
 import { countryName } from "~/lib/ppp";
 import { REFUND_WINDOW_DAYS } from "~/lib/refund-rules";
-import type { RefundExposure } from "~/lib/refund-exposure";
+import type { RefundExposure } from "~/modules/instructor-analytics/refund-exposure";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
 import {
@@ -87,9 +86,9 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     range,
     isAdmin: viewer.isAdmin,
     instructorId,
-    ...getAnalyticsOverview(db, scope),
-    ...getCourseAnalytics(db, scope, requestedCourseId),
-    instructors: viewer.isAdmin ? listAnalyticsInstructors(db) : [],
+    ...getAnalyticsOverview(scope),
+    ...getCourseAnalytics(scope, requestedCourseId),
+    instructors: viewer.isAdmin ? listAnalyticsInstructors() : [],
   };
 }
 

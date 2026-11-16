@@ -1,4 +1,4 @@
-import { splitRevenue } from "~/lib/analytics";
+import { splitRevenue } from "./analytics";
 import { calendarDay, lastDayOfWindow } from "~/lib/refund-rules";
 
 // ─── Refund exposure ───

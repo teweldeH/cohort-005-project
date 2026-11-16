@@ -10,7 +10,7 @@ import {
   parseAnalyticsRange,
   resolveAnalyticsView,
   splitRevenue,
-} from "./analytics";
+} from "../analytics";
 
 describe("analytics config", () => {
   describe("the platform fee", () => {

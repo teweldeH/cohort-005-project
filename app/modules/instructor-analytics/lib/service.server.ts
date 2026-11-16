@@ -33,17 +33,16 @@ import {
   quizzes,
   users,
 } from "~/db/schema";
-import { rangeStart, splitRevenue, type AnalyticsRange } from "~/lib/analytics";
+import { db as appDb } from "~/db";
+import { rangeStart, splitRevenue, type AnalyticsRange } from "../analytics";
 import { getDiscountForCountry } from "~/lib/ppp";
-import {
-  computeRefundExposure,
-  type RefundExposure,
-} from "~/lib/refund-exposure";
+import { computeRefundExposure, type RefundExposure } from "../refund-exposure";
 
 // ─── Instructor Analytics service ───
 // The figures behind the instructor analytics page, one entry point per tab.
-// Every query helper here is private: callers pass the database, a scope and
-// (for the course tab) the course they asked for, and get plain data back.
+// Every query helper here is private: callers pass a scope and (for the
+// course tab) the course they asked for, and get plain data back. The
+// database is the app's unless a caller passes another: tests pass their own.
 
 export type Db = BetterSQLite3Database<typeof schema>;
 
@@ -444,8 +443,8 @@ export type AnalyticsOverview = {
  * still needs the instructor's attention, as of `scope.now`.
  */
 export function getAnalyticsOverview(
-  db: Db,
-  scope: AnalyticsScope
+  scope: AnalyticsScope,
+  db: Db = appDb
 ): AnalyticsOverview {
   const { instructorId, range, now } = scope;
 
@@ -633,7 +632,7 @@ export function getAnalyticsOverview(
  * course contributes to the platform-wide total.
  */
 export function listAnalyticsInstructors(
-  db: Db
+  db: Db = appDb
 ): { id: number; name: string }[] {
   return db
     .selectDistinct({ id: users.id, name: users.name })
@@ -661,9 +660,9 @@ export type CourseAnalytics = {
  * funnel by putting its id in the URL.
  */
 export function getCourseAnalytics(
-  db: Db,
   scope: AnalyticsScope,
-  requestedCourseId: number | null
+  requestedCourseId: number | null,
+  db: Db = appDb
 ): CourseAnalytics {
   // The selector lists every course the viewer owns rather than only the ones
   // that sold: a course nobody is finishing is exactly what this tab is for.

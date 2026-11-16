@@ -8,7 +8,7 @@ import {
   getCourseAnalytics,
   listAnalyticsInstructors,
   type AnalyticsScope,
-} from "./analytics.server";
+} from "../analytics.server";
 
 const NOW = new Date("2026-10-20T12:00:00.000Z");
 
@@ -105,9 +105,9 @@ describe("getCourseAnalytics", () => {
     const other = addInstructorWithCourse("Other Instructor", "Their Course");
 
     const analytics = getCourseAnalytics(
-      db,
       { instructorId: base.instructor.id, range: "all", now: NOW },
-      other.course.id
+      other.course.id,
+      db
     );
 
     expect(analytics.selectedCourseId).toBeNull();
@@ -124,9 +124,9 @@ describe("getCourseAnalytics", () => {
     const other = addInstructorWithCourse("Other Instructor", "A Course");
 
     const analytics = getCourseAnalytics(
-      db,
       { instructorId: null, range: "all", now: NOW },
-      other.course.id
+      other.course.id,
+      db
     );
 
     expect(analytics.selectedCourseId).toBe(other.course.id);
@@ -177,9 +177,9 @@ describe("getCourseAnalytics", () => {
 
     function analyse(range: "all" | "30d" = "all") {
       return getCourseAnalytics(
-        db,
         { instructorId: base.instructor.id, range, now: NOW },
-        base.course.id
+        base.course.id,
+        db
       );
     }
 
@@ -374,16 +374,22 @@ describe("getAnalyticsOverview", () => {
     buy(base.user.id, base.course.id, 10000);
     buy(base.user.id, other.course.id, 5000);
 
-    const own = getAnalyticsOverview(db, {
-      instructorId: base.instructor.id,
-      range: "30d",
-      now: NOW,
-    });
-    const platform = getAnalyticsOverview(db, {
-      instructorId: null,
-      range: "30d",
-      now: NOW,
-    });
+    const own = getAnalyticsOverview(
+      {
+        instructorId: base.instructor.id,
+        range: "30d",
+        now: NOW,
+      },
+      db
+    );
+    const platform = getAnalyticsOverview(
+      {
+        instructorId: null,
+        range: "30d",
+        now: NOW,
+      },
+      db
+    );
 
     expect(own.summary).toEqual({
       grossCents: 10000,
@@ -400,12 +406,15 @@ describe("getAnalyticsOverview", () => {
   });
 
   function overview(scope: Partial<AnalyticsScope> = {}) {
-    return getAnalyticsOverview(db, {
-      instructorId: base.instructor.id,
-      range: "30d",
-      now: NOW,
-      ...scope,
-    });
+    return getAnalyticsOverview(
+      {
+        instructorId: base.instructor.id,
+        range: "30d",
+        now: NOW,
+        ...scope,
+      },
+      db
+    );
   }
 
   it("leaves purchases from before the range out of the summary", () => {

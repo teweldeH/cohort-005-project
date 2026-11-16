@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeRefundExposure } from "./refund-exposure";
+import { computeRefundExposure } from "../refund-exposure";
 
 const NOW = new Date(2026, 9, 20, 12, 0, 0);
 
