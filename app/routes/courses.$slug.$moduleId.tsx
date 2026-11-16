@@ -1,11 +1,9 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/courses.$slug.$moduleId";
-import { getCurrentUserId } from "~/lib/session";
 import { db } from "~/db";
 import {
   categories,
   courses,
-  enrollments,
   lessonProgress,
   lessons,
   modules,
@@ -30,6 +28,9 @@ import {
 import { data, isRouteErrorResponse } from "react-router";
 import { formatDuration } from "~/lib/utils";
 import { z } from "zod";
+import { PurchaseCountryNotice } from "~/components/purchase-country-notice";
+import { mayTakeCourse } from "~/modules/course-permissions/permissions.server";
+import { getViewer } from "~/modules/course-permissions/route.server";
 
 const paramsSchema = z.object({
   slug: z.string().min(1),
@@ -111,18 +112,6 @@ function getModuleWithLessons(id: number) {
   return { ...mod, lessons: moduleLessons };
 }
 
-function isUserEnrolled(userId: number, courseId: number) {
-  const existing = db
-    .select()
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
-
-  return !!existing;
-}
-
 function getLessonProgressForCourse(userId: number, courseId: number) {
   const courseModules = db
     .select({ id: modules.id })
@@ -186,22 +175,27 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw data("Module not found in this course", { status: 404 });
   }
 
-  const currentUserId = await getCurrentUserId(request);
+  const viewer = await getViewer(request);
+  const takeDecision = mayTakeCourse(viewer, course.id);
+  const canTakeCourse = takeDecision.allowed;
+  const outsidePurchaseCountry =
+    !takeDecision.allowed &&
+    takeDecision.reason.kind === "outside-purchase-country"
+      ? {
+          purchaseCountry: takeDecision.reason.purchaseCountry,
+          currentCountry: takeDecision.reason.currentCountry,
+        }
+      : null;
 
-  let enrolled = false;
   let lessonProgressMap: Record<number, string> = {};
 
-  if (currentUserId) {
-    enrolled = isUserEnrolled(currentUserId, course.id);
-
-    if (enrolled) {
-      const progressRecords = getLessonProgressForCourse(
-        currentUserId,
-        course.id
-      );
-      for (const record of progressRecords) {
-        lessonProgressMap[record.lessonId] = record.status;
-      }
+  if (viewer && canTakeCourse) {
+    const progressRecords = getLessonProgressForCourse(
+      viewer.userId,
+      course.id
+    );
+    for (const record of progressRecords) {
+      lessonProgressMap[record.lessonId] = record.status;
     }
   }
 
@@ -228,7 +222,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       instructorBio: courseWithDetails.instructorBio,
     },
     module: moduleWithLessons,
-    enrolled,
+    canTakeCourse,
+    outsidePurchaseCountry,
     lessonProgressMap,
     moduleProgress,
     completedLessons,
@@ -269,7 +264,8 @@ export default function ModuleDetail({ loaderData }: Route.ComponentProps) {
   const {
     course,
     module: mod,
-    enrolled,
+    canTakeCourse,
+    outsidePurchaseCountry,
     lessonProgressMap,
     moduleProgress,
     completedLessons,
@@ -307,8 +303,17 @@ export default function ModuleDetail({ loaderData }: Route.ComponentProps) {
         )}
       </div>
 
-      {/* Progress bar for enrolled students */}
-      {enrolled && totalLessons > 0 && (
+      {outsidePurchaseCountry && (
+        <div className="mb-6">
+          <PurchaseCountryNotice
+            purchaseCountry={outsidePurchaseCountry.purchaseCountry}
+            currentCountry={outsidePurchaseCountry.currentCountry}
+          />
+        </div>
+      )}
+
+      {/* Progress bar for those taking the course */}
+      {canTakeCourse && totalLessons > 0 && (
         <div className="mb-6">
           <div className="mb-1 flex items-center justify-between text-sm">
             <span className="text-muted-foreground">
@@ -362,7 +367,7 @@ export default function ModuleDetail({ loaderData }: Route.ComponentProps) {
 
             const content = (
               <div className="flex items-center gap-3 rounded-md px-3 py-3 text-sm">
-                {enrolled ? (
+                {canTakeCourse ? (
                   isCompleted ? (
                     <CheckCircle2 className="size-4 shrink-0 text-green-500" />
                   ) : isInProgress ? (
@@ -395,7 +400,7 @@ export default function ModuleDetail({ loaderData }: Route.ComponentProps) {
               </div>
             );
 
-            if (enrolled) {
+            if (canTakeCourse) {
               return (
                 <Link
                   key={lesson.id}

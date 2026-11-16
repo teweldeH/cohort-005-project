@@ -1,16 +1,10 @@
 import { Link, redirect } from "react-router";
 import type { Route } from "./+types/courses.$slug.welcome";
 import { db } from "~/db";
-import {
-  courses,
-  categories,
-  users,
-  modules,
-  lessons,
-  enrollments,
-} from "~/db/schema";
-import { eq, and, or } from "drizzle-orm";
-import { getCurrentUserId } from "~/lib/session";
+import { courses, categories, users, modules, lessons } from "~/db/schema";
+import { eq, or } from "drizzle-orm";
+import { mayTakeCourse } from "~/modules/course-permissions/permissions.server";
+import { getViewer } from "~/modules/course-permissions/route.server";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
 import { PartyPopper, MessageCircle, PlayCircle } from "lucide-react";
@@ -77,17 +71,6 @@ function getCourseWithDetails(id: number) {
   };
 }
 
-function isUserEnrolled(userId: number, courseId: number) {
-  const enrollment = db
-    .select()
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
-  return !!enrollment;
-}
-
 export function meta({ loaderData }: Route.MetaArgs) {
   const title = loaderData?.course?.title ?? "Welcome";
   return [
@@ -104,12 +87,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw data("Course not found.", { status: 404 });
   }
 
-  const currentUserId = await getCurrentUserId(request);
-  if (!currentUserId) {
-    throw redirect(`/courses/${slug}`);
-  }
-
-  if (!isUserEnrolled(currentUserId, course.id)) {
+  // Anyone who may not take the course — signed out, no Enrollment, or
+  // outside the purchase country — goes back to the course page, which
+  // explains why.
+  const viewer = await getViewer(request);
+  if (!mayTakeCourse(viewer, course.id).allowed) {
     throw redirect(`/courses/${slug}`);
   }
 
@@ -157,11 +139,7 @@ export default function Welcome({ loaderData }: Route.ComponentProps) {
                 rel="noopener noreferrer"
                 className="block"
               >
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full max-w-sm"
-                >
+                <Button variant="outline" size="lg" className="w-full max-w-sm">
                   <MessageCircle className="mr-2 size-5" />
                   Join the Discord Community
                 </Button>
