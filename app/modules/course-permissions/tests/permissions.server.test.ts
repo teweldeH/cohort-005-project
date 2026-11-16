@@ -191,6 +191,17 @@ describe("manage the course", () => {
     ).toEqual(ALLOWED);
   });
 
+  it("allows an owner who no longer has the Instructor role", () => {
+    world.setRole(world.instructor.id, UserRole.Student);
+
+    expect(
+      mayManageCourse(viewer(world.instructor.id), world.course.id, world.db)
+    ).toEqual(ALLOWED);
+    expect(
+      mayTakeCourse(viewer(world.instructor.id), world.course.id, world.db)
+    ).toEqual(ALLOWED);
+  });
+
   it("denies a Student, even with an Enrollment", () => {
     world.enrol(world.user.id, world.course.id);
 

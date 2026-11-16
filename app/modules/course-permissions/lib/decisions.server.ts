@@ -58,10 +58,12 @@ function lookUp(db: Db, viewer: Viewer, courseId: number): Lookup {
   return { ok: true, user, course, country: viewer.country };
 }
 
-/** The Instructor who owns the course, or any Platform Admin. */
+/**
+ * The Instructor who owns the course, or any Platform Admin. Ownership, not
+ * role: an owner who has since lost the Instructor role still counts.
+ */
 function isCourseManager(user: User, course: Course) {
-  if (user.role === UserRole.Admin) return true;
-  return course.instructorId === user.id && user.role === UserRole.Instructor;
+  return user.role === UserRole.Admin || course.instructorId === user.id;
 }
 
 export function mayManageCourse(
