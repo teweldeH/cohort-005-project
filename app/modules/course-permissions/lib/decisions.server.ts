@@ -125,3 +125,12 @@ export function mayTakeCourse(
 
   return ALLOWED;
 }
+
+/** Whether the user still exists — a session can outlive its user. */
+export function userExists(db: Db, userId: number): boolean {
+  return !!db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, userId))
+    .get();
+}
