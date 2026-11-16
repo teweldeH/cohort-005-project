@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { UserRole } from "~/db/schema";
-import { mayManageCourse, mayTakeCourse } from "../permissions.server";
+import {
+  mayManageCourse,
+  mayTakeCourse,
+  purchaseCountryDenial,
+} from "../permissions.server";
 import { createWorld, type World } from "./fixtures";
 
 let world: World;
@@ -303,5 +307,47 @@ describe("manage the course", () => {
     expect(
       mayManageCourse(viewer(world.user.id), world.course.id, world.db)
     ).toEqual(denied({ kind: "not-course-manager" }));
+  });
+});
+
+describe("purchase-country denial", () => {
+  it("gives both countries when the Student is outside the purchase country", () => {
+    const course = world.addCourse(world.instructor.id, {
+      price: 10000,
+      pppEnabled: true,
+    });
+    world.buy(world.user.id, course.id, "IN");
+
+    const decision = mayTakeCourse(
+      viewer(world.user.id, "US"),
+      course.id,
+      world.db
+    );
+
+    expect(purchaseCountryDenial(decision)).toEqual({
+      purchaseCountry: "IN",
+      currentCountry: "US",
+    });
+  });
+
+  it("is null for any other denial", () => {
+    const decision = mayTakeCourse(
+      viewer(world.user.id),
+      world.course.id,
+      world.db
+    );
+
+    expect(purchaseCountryDenial(decision)).toBeNull();
+  });
+
+  it("is null when allowed", () => {
+    world.enrol(world.user.id, world.course.id);
+    const decision = mayTakeCourse(
+      viewer(world.user.id),
+      world.course.id,
+      world.db
+    );
+
+    expect(purchaseCountryDenial(decision)).toBeNull();
   });
 });

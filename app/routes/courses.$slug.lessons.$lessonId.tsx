@@ -5,6 +5,7 @@ import type { Route } from "./+types/courses.$slug.lessons.$lessonId";
 import {
   mayManageCourse,
   mayTakeCourse,
+  purchaseCountryDenial,
 } from "~/modules/course-permissions/permissions.server";
 import { signedOutMessage } from "~/modules/course-permissions/messages";
 import {
@@ -66,7 +67,6 @@ import {
   NotebookPen,
   MapPin,
   PlayCircle,
-  ShieldAlert,
   XCircle,
   Trophy,
   RotateCcw,
@@ -76,7 +76,7 @@ import { renderMarkdown } from "~/lib/markdown.server";
 import { YouTubePlayer } from "~/components/youtube-player";
 import { data, isRouteErrorResponse } from "react-router";
 import { z } from "zod";
-import { countryName } from "~/lib/ppp";
+import { PurchaseCountryNotice } from "~/components/purchase-country-notice";
 import { parseFormData, parseParams } from "~/lib/validation";
 
 const lessonParamsSchema = z.object({
@@ -687,11 +687,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // its own block; any other denial shows the paywall preview.
   const takeDecision = mayTakeCourse(viewer, course.id);
   const canViewContent = takeDecision.allowed;
-  const outsidePurchaseCountry =
-    !takeDecision.allowed &&
-    takeDecision.reason.kind === "outside-purchase-country"
-      ? takeDecision.reason
-      : null;
+  const outsidePurchaseCountry = purchaseCountryDenial(takeDecision);
   const enrolled =
     currentUserId !== null && isEnrolled(db, currentUserId, course.id);
   let lessonStatus: string | null = null;
@@ -1098,36 +1094,19 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
   const isSubmittingQuiz = quizFetcher.state !== "idle";
 
   if (outsidePurchaseCountry) {
-    const purchaseCountryName = countryName(
-      outsidePurchaseCountry.purchaseCountry
-    );
-    const currentCountryName = countryName(
-      outsidePurchaseCountry.currentCountry
-    );
-
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6">
-        <div className="max-w-md text-center">
-          <ShieldAlert className="mx-auto mb-4 size-16 text-amber-500" />
-          <h1 className="mb-3 text-2xl font-bold">Access Restricted</h1>
-          <p className="mb-4 text-muted-foreground">
-            You purchased this course with a Purchasing Power Parity discount
-            while in <strong>{purchaseCountryName}</strong>, but you're
-            currently accessing from <strong>{currentCountryName}</strong>.
-          </p>
-          <p className="mb-6 text-sm text-muted-foreground">
-            PPP-discounted courses can only be accessed from the country where
-            the purchase was made. This helps keep courses affordable for
-            students in lower-income regions.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <Link to={`/courses/${course.slug}`}>
-              <Button variant="outline">
-                <MapPin className="mr-2 size-4" />
-                Back to Course
-              </Button>
-            </Link>
-          </div>
+        <div className="max-w-md space-y-6 text-center">
+          <PurchaseCountryNotice
+            purchaseCountry={outsidePurchaseCountry.purchaseCountry}
+            currentCountry={outsidePurchaseCountry.currentCountry}
+          />
+          <Link to={`/courses/${course.slug}`}>
+            <Button variant="outline">
+              <MapPin className="mr-2 size-4" />
+              Back to Course
+            </Button>
+          </Link>
         </div>
       </div>
     );

@@ -29,7 +29,10 @@ import { data, isRouteErrorResponse } from "react-router";
 import { formatDuration } from "~/lib/utils";
 import { z } from "zod";
 import { PurchaseCountryNotice } from "~/components/purchase-country-notice";
-import { mayTakeCourse } from "~/modules/course-permissions/permissions.server";
+import {
+  mayTakeCourse,
+  purchaseCountryDenial,
+} from "~/modules/course-permissions/permissions.server";
 import { getViewer } from "~/modules/course-permissions/route.server";
 
 const paramsSchema = z.object({
@@ -178,14 +181,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const viewer = await getViewer(request);
   const takeDecision = mayTakeCourse(viewer, course.id);
   const canTakeCourse = takeDecision.allowed;
-  const outsidePurchaseCountry =
-    !takeDecision.allowed &&
-    takeDecision.reason.kind === "outside-purchase-country"
-      ? {
-          purchaseCountry: takeDecision.reason.purchaseCountry,
-          currentCountry: takeDecision.reason.currentCountry,
-        }
-      : null;
+  const outsidePurchaseCountry = purchaseCountryDenial(takeDecision);
 
   let lessonProgressMap: Record<number, string> = {};
 

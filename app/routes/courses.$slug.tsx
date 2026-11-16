@@ -48,7 +48,10 @@ import { parseFormData } from "~/lib/validation";
 import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
 import { StarRating, StarRatingInput } from "~/components/star-rating";
 import { PurchaseCountryNotice } from "~/components/purchase-country-notice";
-import { mayTakeCourse } from "~/modules/course-permissions/permissions.server";
+import {
+  mayTakeCourse,
+  purchaseCountryDenial,
+} from "~/modules/course-permissions/permissions.server";
 import { signedOutMessage } from "~/modules/course-permissions/messages";
 import {
   enforce,
@@ -388,14 +391,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const takeDecision = mayTakeCourse(viewer, course.id);
   const canTakeCourse = takeDecision.allowed;
-  const outsidePurchaseCountry =
-    !takeDecision.allowed &&
-    takeDecision.reason.kind === "outside-purchase-country"
-      ? {
-          purchaseCountry: takeDecision.reason.purchaseCountry,
-          currentCountry: takeDecision.reason.currentCountry,
-        }
-      : null;
+  const outsidePurchaseCountry = purchaseCountryDenial(takeDecision);
 
   let progress = 0;
   let lessonProgressMap: Record<number, string> = {};

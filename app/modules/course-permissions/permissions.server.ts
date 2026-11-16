@@ -38,3 +38,17 @@ export function mayManageCourse(
 ): Decision {
   return decideManage(viewer, courseId, db);
 }
+
+/**
+ * Where the Student bought and where they are now, when the decision turned
+ * them away for being outside the country of a discounted Purchase.
+ */
+export function purchaseCountryDenial(
+  decision: Decision
+): { purchaseCountry: string; currentCountry: string } | null {
+  if (decision.allowed || decision.reason.kind !== "outside-purchase-country") {
+    return null;
+  }
+  const { purchaseCountry, currentCountry } = decision.reason;
+  return { purchaseCountry, currentCountry };
+}
