@@ -682,11 +682,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const viewer = await getViewer(request);
   const currentUserId = viewer?.userId ?? null;
 
-  // May they take the course? Only then does the response carry the lesson's
-  // video, body and quiz. A denial outside the purchase country is shown as
-  // its own block; any other denial shows the paywall preview.
   const takeDecision = mayTakeCourse(viewer, course.id);
-  const canViewContent = takeDecision.allowed;
+  const canTakeCourse = takeDecision.allowed;
   const outsidePurchaseCountry = purchaseCountryDenial(takeDecision);
   const enrolled =
     currentUserId !== null && isEnrolled(db, currentUserId, course.id);
@@ -699,7 +696,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     if (enrolled) {
       // Viewing marks the lesson in progress, but only for someone who may
       // take the course: progress is a lesson write like any other.
-      if (canViewContent) markLessonInProgress(currentUserId, lessonId);
+      if (canTakeCourse) markLessonInProgress(currentUserId, lessonId);
       const progress = getLessonProgress(currentUserId, lessonId);
       lessonStatus = progress?.status ?? null;
 
@@ -730,24 +727,24 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Comments are confidential to the course: only people who can read the
   // lesson can read the discussion on it.
   const instructor = getUserById(course.instructorId);
-  const comments = canViewContent
+  const comments = canTakeCourse
     ? await renderThread(getLessonThread(lessonId))
     : [];
 
   // The Student's own Bookmark and Note on this lesson, behind the same
   // content-access bar as the discussion. A signed-out visitor gets neither.
   const bookmarked =
-    canViewContent && currentUserId
+    canTakeCourse && currentUserId
       ? isBookmarked(db, currentUserId, lessonId)
       : false;
   const note =
-    canViewContent && currentUserId
+    canTakeCourse && currentUserId
       ? getNote(db, currentUserId, lessonId)
       : undefined;
 
   // Render lesson content from Markdown to HTML server-side
   const contentHtml =
-    canViewContent && lesson.content
+    canTakeCourse && lesson.content
       ? await renderMarkdown(lesson.content)
       : null;
 
@@ -759,7 +756,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
 
   // Check for quiz attached to this lesson
-  const quizRecord = canViewContent ? getQuizByLessonId(lessonId) : undefined;
+  const quizRecord = canTakeCourse ? getQuizByLessonId(lessonId) : undefined;
   let quiz: {
     id: number;
     title: string;
@@ -826,7 +823,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       title: lesson.title,
       durationMinutes: lesson.durationMinutes,
       githubRepoUrl: lesson.githubRepoUrl,
-      videoUrl: canViewContent ? lesson.videoUrl : null,
+      videoUrl: canTakeCourse ? lesson.videoUrl : null,
     },
     contentHtml,
     lessonStatus,
@@ -841,7 +838,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     lessonProgressMap,
     outsidePurchaseCountry,
     comments,
-    canViewContent,
+    canTakeCourse,
     canModerate: mayManageCourse(viewer, course.id).allowed,
     instructorName: instructor?.name ?? "your instructor",
     bookmarked,
@@ -1063,7 +1060,7 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
     lessonProgressMap,
     outsidePurchaseCountry,
     comments,
-    canViewContent,
+    canTakeCourse,
     canModerate,
     instructorName,
     bookmarked,
@@ -1151,7 +1148,7 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
           {/* Lesson Title */}
           <div className="mb-2 flex items-start justify-between gap-3">
             <h1 className="text-3xl font-bold">{lesson.title}</h1>
-            {canViewContent && currentUserId && (
+            {canTakeCourse && currentUserId && (
               <BookmarkToggle bookmarked={bookmarked} />
             )}
           </div>
@@ -1192,7 +1189,7 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
           )}
 
           {/* Note — under the video, so the Student can write while they watch */}
-          {canViewContent && currentUserId && <LessonNote note={note} />}
+          {canTakeCourse && currentUserId && <LessonNote note={note} />}
 
           {/* Lesson Content */}
           {contentHtml && (
@@ -1203,7 +1200,7 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
           )}
 
           {/* Paywall preview — the loader sent no video, body or quiz */}
-          {!canViewContent && (
+          {!canTakeCourse && (
             <Card className="mb-8">
               <CardContent className="py-12 text-center">
                 <Lock className="mx-auto mb-3 size-10 text-muted-foreground" />
@@ -1219,7 +1216,7 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
             </Card>
           )}
 
-          {canViewContent && !contentHtml && !lesson.videoUrl && (
+          {canTakeCourse && !contentHtml && !lesson.videoUrl && (
             <Card className="mb-8">
               <CardContent className="py-12 text-center text-muted-foreground">
                 No content has been added to this lesson yet.
@@ -1285,7 +1282,7 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
           )}
 
           {/* Questions & Discussion — confidential to people with access */}
-          {canViewContent && (
+          {canTakeCourse && (
             <CommentThread
               comments={comments}
               currentUserId={currentUserId}

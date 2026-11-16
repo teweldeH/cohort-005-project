@@ -18,7 +18,6 @@ export type Db = BetterSQLite3Database<typeof schema>;
 /** Who is asking: a signed-in user and the country they're in, or nobody. */
 export type Viewer = { userId: number; country: string | null } | null;
 
-/** Why a viewer may not do something with a course. */
 export type DenialReason =
   | { kind: "signed-out" }
   | { kind: "course-not-found" }
@@ -44,16 +43,19 @@ function deny(reason: DenialReason): Decision {
 type Course = typeof courses.$inferSelect;
 type User = typeof users.$inferSelect;
 
-type Lookup =
-  | { ok: true; user: User; course: Course; country: string | null }
-  | { ok: false; decision: Decision };
+type UserAndCourse =
+  | { found: true; user: User; course: Course; country: string | null }
+  | { found: false; denial: Decision };
 
-/** The signed-in user and the course, or the reason we can't go further. */
-function lookUp(db: Db, viewer: Viewer, courseId: number): Lookup {
-  if (!viewer) return { ok: false, decision: deny({ kind: "signed-out" }) };
-
-  const user = db.select().from(users).where(eq(users.id, viewer.userId)).get();
-  if (!user) return { ok: false, decision: deny({ kind: "signed-out" }) };
+function findUserAndCourse(
+  db: Db,
+  viewer: Viewer,
+  courseId: number
+): UserAndCourse {
+  const user = viewer && findUser(db, viewer.userId);
+  if (!viewer || !user) {
+    return { found: false, denial: deny({ kind: "signed-out" }) };
+  }
 
   const course = db
     .select()
@@ -61,10 +63,10 @@ function lookUp(db: Db, viewer: Viewer, courseId: number): Lookup {
     .where(eq(courses.id, courseId))
     .get();
   if (!course) {
-    return { ok: false, decision: deny({ kind: "course-not-found" }) };
+    return { found: false, denial: deny({ kind: "course-not-found" }) };
   }
 
-  return { ok: true, user, course, country: viewer.country };
+  return { found: true, user, course, country: viewer.country };
 }
 
 /**
@@ -80,10 +82,10 @@ export function mayManageCourse(
   courseId: number,
   db: Db
 ): Decision {
-  const found = lookUp(db, viewer, courseId);
-  if (!found.ok) return found.decision;
+  const subject = findUserAndCourse(db, viewer, courseId);
+  if (!subject.found) return subject.denial;
 
-  return isCourseManager(found.user, found.course)
+  return isCourseManager(subject.user, subject.course)
     ? ALLOWED
     : deny({ kind: "not-course-manager" });
 }
@@ -93,9 +95,9 @@ export function mayTakeCourse(
   courseId: number,
   db: Db
 ): Decision {
-  const found = lookUp(db, viewer, courseId);
-  if (!found.ok) return found.decision;
-  const { user, course, country } = found;
+  const subject = findUserAndCourse(db, viewer, courseId);
+  if (!subject.found) return subject.denial;
+  const { user, course, country } = subject;
 
   // Course Managers read without an Enrollment and are exempt from the
   // purchase-country check (ADR-0009).
@@ -167,21 +169,7 @@ function findCheckedPurchase(db: Db, userId: number, courseId: number) {
     .get();
 }
 
-/** Whether the user still exists — a session can outlive its user. */
-export function userExists(db: Db, userId: number): boolean {
-  return !!db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.id, userId))
-    .get();
-}
-
-/** The user's platform role, or null if they no longer exist. */
-export function findRole(db: Db, userId: number): UserRole | null {
-  const user = db
-    .select({ role: users.role })
-    .from(users)
-    .where(eq(users.id, userId))
-    .get();
-  return user?.role ?? null;
+/** The user, or undefined once they no longer exist: a session can outlive its user. */
+export function findUser(db: Db, userId: number): User | undefined {
+  return db.select().from(users).where(eq(users.id, userId)).get();
 }

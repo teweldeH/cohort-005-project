@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { UserRole } from "~/db/schema";
 import { setCurrentUserId, setDevCountry } from "~/lib/session";
+import { mayTakeCourse } from "../permissions.server";
 import {
+  enforce,
   getViewer,
   requireCourseManager,
-  requireCourseTaker,
   requireInstructorOrAdmin,
+  requireViewer,
 } from "../route.server";
 import { createWorld, type World } from "./fixtures";
 
@@ -89,19 +91,26 @@ describe("getViewer", () => {
   });
 });
 
+/** What a lesson action does before letting the viewer take the course. */
+async function takeCourse(request: Request, courseId: number) {
+  const viewer = await requireViewer(request, world.db);
+  enforce(mayTakeCourse(viewer, courseId, world.db));
+}
+
 describe("denials become responses", () => {
   it("signed out is a 401", async () => {
     const request = await requestAs(null);
 
-    expect(
-      await thrown(requireCourseTaker(request, world.course.id, world.db))
-    ).toEqual({ status: 401, message: "Sign in to continue." });
+    expect(await thrown(takeCourse(request, world.course.id))).toEqual({
+      status: 401,
+      message: "Sign in to continue.",
+    });
   });
 
   it("course not found is a 404", async () => {
     const request = await requestAs(world.user.id);
 
-    expect(await thrown(requireCourseTaker(request, 9999, world.db))).toEqual({
+    expect(await thrown(takeCourse(request, 9999))).toEqual({
       status: 404,
       message: "Course not found.",
     });
@@ -110,9 +119,10 @@ describe("denials become responses", () => {
   it("no Enrollment is a 403", async () => {
     const request = await requestAs(world.user.id);
 
-    expect(
-      await thrown(requireCourseTaker(request, world.course.id, world.db))
-    ).toEqual({ status: 403, message: "You must be enrolled in this course." });
+    expect(await thrown(takeCourse(request, world.course.id))).toEqual({
+      status: 403,
+      message: "You must be enrolled in this course.",
+    });
   });
 
   it("outside the purchase country is a 403", async () => {
@@ -120,9 +130,7 @@ describe("denials become responses", () => {
     world.buy(world.user.id, course.id, "IN");
     const request = await requestAs(world.user.id, { devCountry: "US" });
 
-    expect(
-      await thrown(requireCourseTaker(request, course.id, world.db))
-    ).toEqual({
+    expect(await thrown(takeCourse(request, course.id))).toEqual({
       status: 403,
       message:
         "This course was bought at a discount in another country, so it can only be taken from there.",

@@ -2,7 +2,6 @@ import type { DenialReason } from "./decisions.server";
 
 export const signedOutMessage = "Sign in to continue.";
 
-/** The HTTP status and the one message for each denial reason. */
 export function denialStatusAndMessage(reason: DenialReason): {
   status: 401 | 403 | 404;
   message: string;
