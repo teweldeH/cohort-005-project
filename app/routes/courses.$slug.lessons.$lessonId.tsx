@@ -976,6 +976,8 @@ export async function action({ params, request }: Route.ActionArgs) {
   }
 
   if (intent === "mark-complete") {
+    enforce(mayTakeCourse(viewer, course.id));
+    requireLessonInCourse(lessonId, course.id);
     markLessonComplete(currentUserId, lessonId);
     return { success: true };
   }

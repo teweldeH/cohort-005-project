@@ -11,7 +11,7 @@ vi.mock("~/db", async () => {
 });
 
 const { db } = (await import("~/db")) as unknown as { db: TestDb };
-const { loader } = await import("./courses.$slug.lessons.$lessonId");
+const { loader, action } = await import("./courses.$slug.lessons.$lessonId");
 
 // What only someone who may take the course should ever receive.
 const VIDEO_URL = "https://www.youtube.com/watch?v=secret-video";
@@ -114,6 +114,36 @@ async function loadAs(userId: number | null, devCountry?: string) {
   } as Parameters<typeof loader>[0]);
 }
 
+async function actAs(
+  userId: number,
+  fields: Record<string, string>,
+  devCountry?: string
+) {
+  const request = await requestAs(userId, devCountry);
+  const body = new FormData();
+  for (const [key, value] of Object.entries(fields)) body.set(key, value);
+  return action({
+    request: new Request(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body,
+    }),
+    params: { slug: course.slug, lessonId: String(lesson.id) },
+    context: {},
+  } as Parameters<typeof action>[0]);
+}
+
+/** The status and message of a thrown `data()` response, or null. */
+async function refusal(promise: Promise<unknown>) {
+  try {
+    await promise;
+    return null;
+  } catch (error) {
+    const thrown = error as { init?: { status?: number }; data?: unknown };
+    return { status: thrown.init?.status, message: thrown.data };
+  }
+}
+
 /** Whether any of the lesson's content appears anywhere in the response. */
 function carriesContent(response: unknown) {
   const json = JSON.stringify(response);
@@ -160,5 +190,55 @@ describe("lesson loader", () => {
     expect(response.lesson.videoUrl).toBe(VIDEO_URL);
     expect(response.contentHtml).toContain(BODY);
     expect(response.quiz?.title).toBe(QUIZ_TITLE);
+  });
+});
+
+describe("marking a lesson complete", () => {
+  it("is refused for a Student outside the purchase country, and records nothing", async () => {
+    const student = addStudent("away-marker");
+    db.insert(schema.purchases)
+      .values({
+        userId: student.id,
+        courseId: course.id,
+        amountPaid: 1000,
+        country: "IN",
+      })
+      .run();
+    db.insert(schema.enrollments)
+      .values({ userId: student.id, courseId: course.id })
+      .run();
+
+    const refused = await refusal(
+      actAs(student.id, { intent: "mark-complete" }, "US")
+    );
+
+    expect(refused?.status).toBe(403);
+    const back = await loadAs(student.id, "IN");
+    expect(back.lessonStatus).not.toBe("completed");
+  });
+
+  it("is refused for a Student without an Enrollment", async () => {
+    const refused = await refusal(
+      actAs(addStudent("unenrolled-marker").id, { intent: "mark-complete" })
+    );
+
+    expect(refused?.status).toBe(403);
+  });
+
+  it("is allowed for a Student with an Enrollment", async () => {
+    const student = addStudent("marker");
+    db.insert(schema.enrollments)
+      .values({ userId: student.id, courseId: course.id })
+      .run();
+
+    await actAs(student.id, { intent: "mark-complete" });
+
+    expect((await loadAs(student.id)).lessonStatus).toBe("completed");
+  });
+
+  it("is allowed for the Course Manager", async () => {
+    expect(
+      await refusal(actAs(base.instructor.id, { intent: "mark-complete" }))
+    ).toBeNull();
   });
 });
