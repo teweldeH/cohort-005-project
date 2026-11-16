@@ -3,6 +3,11 @@ import { Link, useFetcher, useNavigate } from "react-router";
 import { toast } from "sonner";
 import type { Route } from "./+types/instructor.$courseId.lessons.$lessonId.quiz";
 import { getCurrentUserId } from "~/lib/session";
+import { mayManageCourse } from "~/modules/course-permissions/permissions.server";
+import {
+  enforce,
+  requireViewer,
+} from "~/modules/course-permissions/route.server";
 import {
   UserRole,
   QuestionType,
@@ -278,21 +283,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
 // ─── Loader ───
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const currentUserId = await getCurrentUserId(request);
-
-  if (!currentUserId) {
-    throw data("Select a user from the DevUI panel.", { status: 401 });
-  }
-
-  const user = getUserById(currentUserId);
-  if (
-    !user ||
-    (user.role !== UserRole.Instructor && user.role !== UserRole.Admin)
-  ) {
-    throw data("Only instructors and admins can access this page.", {
-      status: 403,
-    });
-  }
+  const viewer = await requireViewer(request);
 
   const courseId = parseInt(params.courseId, 10);
   if (isNaN(courseId)) {
@@ -304,9 +295,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw data("Course not found.", { status: 404 });
   }
 
-  if (course.instructorId !== currentUserId && user.role !== UserRole.Admin) {
-    throw data("You can only edit your own courses.", { status: 403 });
-  }
+  enforce(mayManageCourse(viewer, courseId));
 
   const lessonId = parseInt(params.lessonId, 10);
   if (isNaN(lessonId)) {

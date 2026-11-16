@@ -8,9 +8,13 @@ import {
   type DropResult,
 } from "@hello-pangea/dnd";
 import type { Route } from "./+types/instructor.$courseId";
-import { getCurrentUserId } from "~/lib/session";
+import { mayManageCourse } from "~/modules/course-permissions/permissions.server";
+import {
+  enforce,
+  requireViewer,
+} from "~/modules/course-permissions/route.server";
 import { markdown } from "~/lib/text";
-import { CourseStatus, UserRole } from "~/db/schema";
+import { CourseStatus } from "~/db/schema";
 import { db } from "~/db";
 import {
   courses,
@@ -555,24 +559,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const currentUserId = await getCurrentUserId(request);
-
-  if (!currentUserId) {
-    throw data("Select a user from the DevUI panel to manage courses.", {
-      status: 401,
-    });
-  }
-
-  const user = getUserById(currentUserId);
-
-  if (
-    !user ||
-    (user.role !== UserRole.Instructor && user.role !== UserRole.Admin)
-  ) {
-    throw data("Only instructors and admins can access this page.", {
-      status: 403,
-    });
-  }
+  const viewer = await requireViewer(request);
 
   const courseId = parseInt(params.courseId, 10);
   if (isNaN(courseId)) {
@@ -585,9 +572,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw data("Course not found.", { status: 404 });
   }
 
-  if (course.instructorId !== currentUserId && user.role !== UserRole.Admin) {
-    throw data("You can only edit your own courses.", { status: 403 });
-  }
+  enforce(mayManageCourse(viewer, courseId));
 
   const lessonCount = getLessonCountForCourse(courseId);
   const enrollmentCount = getEnrollmentCountForCourse(courseId);
@@ -647,21 +632,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 }
 
 export async function action({ params, request }: Route.ActionArgs) {
-  const currentUserId = await getCurrentUserId(request);
-
-  if (!currentUserId) {
-    throw data("You must be logged in.", { status: 401 });
-  }
-
-  const user = getUserById(currentUserId);
-  if (
-    !user ||
-    (user.role !== UserRole.Instructor && user.role !== UserRole.Admin)
-  ) {
-    throw data("Only instructors and admins can edit courses.", {
-      status: 403,
-    });
-  }
+  const viewer = await requireViewer(request);
 
   const { courseId } = parseParams(params, courseEditorParamsSchema);
 
@@ -670,9 +641,7 @@ export async function action({ params, request }: Route.ActionArgs) {
     throw data("Course not found.", { status: 404 });
   }
 
-  if (course.instructorId !== currentUserId && user.role !== UserRole.Admin) {
-    throw data("You can only edit your own courses.", { status: 403 });
-  }
+  enforce(mayManageCourse(viewer, courseId));
 
   const formData = await request.formData();
   const parsed = parseFormData(formData, courseEditorActionSchema);

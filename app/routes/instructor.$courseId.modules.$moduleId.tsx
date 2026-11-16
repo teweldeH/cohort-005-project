@@ -1,14 +1,11 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/instructor.$courseId.modules.$moduleId";
-import { getCurrentUserId } from "~/lib/session";
+import { mayManageCourse } from "~/modules/course-permissions/permissions.server";
 import {
-  UserRole,
-  users,
-  courses,
-  categories,
-  modules,
-  lessons,
-} from "~/db/schema";
+  enforce,
+  requireViewer,
+} from "~/modules/course-permissions/route.server";
+import { users, courses, categories, modules, lessons } from "~/db/schema";
 import { db } from "~/db";
 import { eq, or } from "drizzle-orm";
 import { Card, CardContent } from "~/components/ui/card";
@@ -33,10 +30,6 @@ const paramsSchema = z.object({
   courseId: z.coerce.number().int(),
   moduleId: z.coerce.number().int(),
 });
-
-function getUserById(id: number) {
-  return db.select().from(users).where(eq(users.id, id)).get();
-}
 
 function getCourseById(id: number) {
   return db.select().from(courses).where(eq(courses.id, id)).get();
@@ -120,24 +113,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const currentUserId = await getCurrentUserId(request);
-
-  if (!currentUserId) {
-    throw data("Select a user from the DevUI panel to manage courses.", {
-      status: 401,
-    });
-  }
-
-  const user = getUserById(currentUserId);
-
-  if (
-    !user ||
-    (user.role !== UserRole.Instructor && user.role !== UserRole.Admin)
-  ) {
-    throw data("Only instructors and admins can access this page.", {
-      status: 403,
-    });
-  }
+  const viewer = await requireViewer(request);
 
   const parsed = paramsSchema.safeParse(params);
   if (!parsed.success) {
@@ -151,9 +127,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw data("Course not found.", { status: 404 });
   }
 
-  if (course.instructorId !== currentUserId && user.role !== UserRole.Admin) {
-    throw data("You can only view your own courses.", { status: 403 });
-  }
+  enforce(mayManageCourse(viewer, courseId));
 
   const courseWithDetails = getCourseWithDetails(courseId);
   if (!courseWithDetails) {
