@@ -2,6 +2,7 @@ import { createTestDb, seedBaseData, type TestDb } from "~/test/setup";
 import * as schema from "~/db/schema";
 import { UserRole } from "~/db/schema";
 import { eq } from "drizzle-orm";
+import { enrollStudentInTransaction } from "~/lib/enrollments.server";
 import { markdown } from "~/lib/text";
 
 // A small in-memory world for course-permissions tests: a Student, the
@@ -45,7 +46,8 @@ export function createWorld() {
   }
 
   function enrol(userId: number, courseId: number) {
-    db.insert(schema.enrollments).values({ userId, courseId }).run();
+    const result = enrollStudentInTransaction(db, userId, courseId, new Date());
+    if (!result.ok) throw new Error(result.error);
   }
 
   function buy(userId: number, courseId: number, country: string | null) {
