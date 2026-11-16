@@ -1,0 +1,20 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # npm ci runs the install scripts on package.json's allowScripts list,
+      # so better-sqlite3 builds its native binding here.
+      - run: npm ci
+      - run: npm run check

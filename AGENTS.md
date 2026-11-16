@@ -1,9 +1,6 @@
 ## Verification checks
 
-Do these checks in this order before you report a change to `app/` as complete:
-
-1. `npm run typecheck`
-2. `npm run test`
+Run `npm run check` before you report a change to `app/` as complete. It runs typecheck, then the tests, and CI runs the same command on every PR.
 
 ## When something breaks
 
