@@ -12,10 +12,10 @@ Modules are deep modules: see [app/modules/README.md](./app/modules/README.md) b
 
 ## When something breaks
 
-| Symptom                                         | Cause                                                                                                  |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 401 "Select a user from the DevUI panel"        | No user in the session — switch users and country in the floating panel (`app/components/dev-ui.tsx`). |
-| `tsc` reports every `./+types/*` import missing | Typegen has not run. Use `npm run typecheck`, which runs `react-router typegen` first.                 |
+| Symptom                                                                         | Cause                                                                                                  |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 401 "Sign in to continue." (older pages: "Select a user from the DevUI panel…") | No user in the session — switch users and country in the floating panel (`app/components/dev-ui.tsx`). |
+| `tsc` reports every `./+types/*` import missing                                 | Typegen has not run. Use `npm run typecheck`, which runs `react-router typegen` first.                 |
 
 ## Agent skills
 

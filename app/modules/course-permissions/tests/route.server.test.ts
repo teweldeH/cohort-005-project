@@ -95,7 +95,7 @@ describe("denials become responses", () => {
 
     expect(
       await thrown(requireCourseTaker(request, world.course.id, world.db))
-    ).toEqual({ status: 401, message: "Select a user from the DevUI panel." });
+    ).toEqual({ status: 401, message: "Sign in to continue." });
   });
 
   it("course not found is a 404", async () => {
@@ -183,7 +183,7 @@ describe("requireInstructorOrAdmin", () => {
 
     expect(await thrown(requireInstructorOrAdmin(request, world.db))).toEqual({
       status: 401,
-      message: "Select a user from the DevUI panel.",
+      message: "Sign in to continue.",
     });
   });
 });

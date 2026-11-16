@@ -7,7 +7,7 @@ export function denialStatusAndMessage(reason: DenialReason): {
 } {
   switch (reason.kind) {
     case "signed-out":
-      return { status: 401, message: "Select a user from the DevUI panel." };
+      return { status: 401, message: "Sign in to continue." };
     case "course-not-found":
       return { status: 404, message: "Course not found." };
     case "no-enrollment":
