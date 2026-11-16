@@ -47,6 +47,11 @@ import {
   rangeStart,
 } from "~/lib/analytics";
 import { countryName } from "~/lib/ppp";
+import {
+  REFUND_WINDOW_DAYS,
+  calendarDay,
+  lastDayOfWindow,
+} from "~/lib/refund-rules";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
 import {
@@ -798,22 +803,7 @@ function getCourseRevenueByCountry(
 // Gross revenue is reported the moment a purchase lands, but a purchase is
 // refundable for fourteen days, so some of what this page calls revenue is
 // still the learner's money. This panel says how much of it is.
-const REFUND_WINDOW_DAYS = 14;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-// Whole days, not hours — someone who buys at 23:00 gets the whole of their
-// fourteenth day.
-function calendarDay(when: Date): string {
-  const month = String(when.getMonth() + 1).padStart(2, "0");
-  const day = String(when.getDate()).padStart(2, "0");
-  return `${when.getFullYear()}-${month}-${day}`;
-}
-
-function lastDayOfRefundWindow(purchasedAtIso: string): string {
-  const deadline = new Date(purchasedAtIso);
-  deadline.setDate(deadline.getDate() + REFUND_WINDOW_DAYS);
-  return calendarDay(deadline);
-}
 
 type ExposedCourse = {
   courseId: number;
@@ -1039,7 +1029,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
   let closingTodayCount = 0;
 
   for (const row of exposureRows) {
-    const lastDay = lastDayOfRefundWindow(row.createdAt);
+    const lastDay = lastDayOfWindow(row.createdAt);
     if (today > lastDay) continue;
 
     // Whole days between today and the last day the learner may still ask.

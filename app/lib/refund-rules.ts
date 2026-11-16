@@ -6,6 +6,21 @@ export const REFUND_WINDOW_DAYS = 14;
 export const REFUND_WATCH_LIMIT_SECONDS = 60 * 60;
 export const REFUND_COMPLETION_LIMIT = 0.5;
 
+// The fourteen-day window is counted in whole days, not hours — someone who
+// buys at 23:00 should still get the whole of their fourteenth day.
+export function calendarDay(when: Date): string {
+  const month = String(when.getMonth() + 1).padStart(2, "0");
+  const day = String(when.getDate()).padStart(2, "0");
+  return `${when.getFullYear()}-${month}-${day}`;
+}
+
+/** The last calendar day on which a Refund Request can still be raised. */
+export function lastDayOfWindow(purchasedAtIso: string): string {
+  const deadline = new Date(purchasedAtIso);
+  deadline.setDate(deadline.getDate() + REFUND_WINDOW_DAYS);
+  return calendarDay(deadline);
+}
+
 export type RuleBreak =
   | "window_closed"
   | "watched_too_much"

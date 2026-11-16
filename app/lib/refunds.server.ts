@@ -27,6 +27,8 @@ import {
   REFUND_COMPLETION_LIMIT,
   REFUND_WATCH_LIMIT_SECONDS,
   REFUND_WINDOW_DAYS,
+  calendarDay,
+  lastDayOfWindow,
   type RuleBreak,
 } from "~/lib/refund-rules";
 
@@ -40,20 +42,6 @@ type Purchase = typeof purchases.$inferSelect;
 type Seat = typeof coupons.$inferSelect;
 
 // ─── Calendar days ───
-
-// The fourteen-day window is counted in whole days, not hours — someone who
-// buys at 23:00 should still get the whole of their fourteenth day.
-export function calendarDay(when: Date): string {
-  const month = String(when.getMonth() + 1).padStart(2, "0");
-  const day = String(when.getDate()).padStart(2, "0");
-  return `${when.getFullYear()}-${month}-${day}`;
-}
-
-export function lastDayOfWindow(purchasedAtIso: string): string {
-  const deadline = new Date(purchasedAtIso);
-  deadline.setDate(deadline.getDate() + REFUND_WINDOW_DAYS);
-  return calendarDay(deadline);
-}
 
 function isWithinWindow(purchasedAtIso: string, on: Date): boolean {
   const day = calendarDay(on);
