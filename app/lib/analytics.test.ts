@@ -8,6 +8,7 @@ import {
   formatMoney,
   rangeStart,
   parseAnalyticsRange,
+  resolveAnalyticsView,
   splitRevenue,
 } from "./analytics";
 
@@ -91,6 +92,79 @@ describe("analytics config", () => {
     it("falls back to the default for junk or a missing param", () => {
       expect(parseAnalyticsRange(null)).toBe("30d");
       expect(parseAnalyticsRange("last tuesday")).toBe("30d");
+    });
+  });
+
+  describe("resolveAnalyticsView", () => {
+    const nothingRequested = {
+      tab: null,
+      range: null,
+      instructor: null,
+      course: null,
+    };
+    const instructor = { userId: 3, isAdmin: false };
+    const admin = { userId: 1, isAdmin: true };
+
+    it("pins an instructor to their own figures whatever they ask for", () => {
+      const view = resolveAnalyticsView(
+        { ...nothingRequested, instructor: "7" },
+        instructor
+      );
+
+      expect(view.instructorId).toBe(3);
+    });
+
+    it("lets an admin pick an instructor", () => {
+      const view = resolveAnalyticsView(
+        { ...nothingRequested, instructor: "7" },
+        admin
+      );
+
+      expect(view.instructorId).toBe(7);
+    });
+
+    it("shows an admin every instructor when none is picked", () => {
+      expect(resolveAnalyticsView(nothingRequested, admin).instructorId).toBe(
+        null
+      );
+    });
+
+    it("drops ids that aren't positive whole numbers", () => {
+      for (const junk of ["abc", "0", "-2", "1.5", ""]) {
+        const view = resolveAnalyticsView(
+          { ...nothingRequested, instructor: junk, course: junk },
+          admin
+        );
+
+        expect(view.instructorId).toBe(null);
+        expect(view.requestedCourseId).toBe(null);
+      }
+    });
+
+    it("passes the requested course through for the course service to check", () => {
+      expect(
+        resolveAnalyticsView({ ...nothingRequested, course: "12" }, instructor)
+          .requestedCourseId
+      ).toBe(12);
+    });
+
+    it("opens the course tab only when asked, and defaults the range", () => {
+      expect(resolveAnalyticsView(nothingRequested, instructor)).toMatchObject({
+        tab: "overview",
+        range: "30d",
+      });
+      expect(
+        resolveAnalyticsView(
+          { ...nothingRequested, tab: "course", range: "7d" },
+          instructor
+        )
+      ).toMatchObject({ tab: "course", range: "7d" });
+      expect(
+        resolveAnalyticsView(
+          { ...nothingRequested, tab: "nonsense" },
+          instructor
+        ).tab
+      ).toBe("overview");
     });
   });
 

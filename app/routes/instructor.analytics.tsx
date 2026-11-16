@@ -43,7 +43,7 @@ import {
   PLATFORM_FEE_PERCENT,
   formatBucket,
   formatMoney,
-  parseAnalyticsRange,
+  resolveAnalyticsView,
   rangeStart,
 } from "~/lib/analytics";
 import { countryName } from "~/lib/ppp";
@@ -83,9 +83,6 @@ import { AlertTriangle, Rocket } from "lucide-react";
 // Admins additionally get an instructor picker. With none picked the service
 // receives a null instructor, meaning platform-wide.
 
-// "course" is the second tab; anything else falls back to the overview.
-type AnalyticsTab = "overview" | "course";
-
 const chartConfig = {
   grossCents: { label: "Gross revenue", color: "var(--chart-1)" },
   netCents: { label: "Net earnings", color: "var(--chart-2)" },
@@ -96,12 +93,6 @@ export function meta() {
     { title: "Analytics — Cadence" },
     { name: "description", content: "Revenue and earnings for your courses." },
   ];
-}
-
-/** A search param that should be a row id, or null if it isn't one. */
-function parseId(value: string | null): number | null {
-  const id = Number(value);
-  return value !== null && Number.isInteger(id) && id > 0 ? id : null;
 }
 
 type RevenueSummary = {
@@ -793,17 +784,17 @@ function getCourseRevenueByCountry(
 export async function loader({ request, url }: Route.LoaderArgs) {
   // The only read of the clock for this request: every panel agrees on "today".
   const now = new Date();
-  const { userId, isAdmin } = await requireInstructorOrAdmin(request);
-
-  const range = parseAnalyticsRange(url.searchParams.get("range"));
-  const tab: AnalyticsTab =
-    url.searchParams.get("tab") === "course" ? "course" : "overview";
-
-  // Instructors are pinned to their own figures; only an admin may look
-  // elsewhere, and null means "every instructor".
-  const instructorId = isAdmin
-    ? parseId(url.searchParams.get("instructor"))
-    : userId;
+  const viewer = await requireInstructorOrAdmin(request);
+  const { isAdmin } = viewer;
+  const { tab, range, instructorId, requestedCourseId } = resolveAnalyticsView(
+    {
+      tab: url.searchParams.get("tab"),
+      range: url.searchParams.get("range"),
+      instructor: url.searchParams.get("instructor"),
+      course: url.searchParams.get("course"),
+    },
+    viewer
+  );
   const scope: AnalyticsScope = { instructorId, range, now };
 
   // The selector lists every course the viewer owns rather than only the ones
@@ -815,7 +806,6 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     .orderBy(courses.title)
     .all();
 
-  const requestedCourseId = parseId(url.searchParams.get("course"));
   // Checked against the list rather than trusted: the id arrives in the URL,
   // and an instructor may not read another instructor's funnel.
   const selectedCourseId = courseOptions.some(

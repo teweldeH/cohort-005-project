@@ -33,6 +33,47 @@ export function parseAnalyticsRange(value: string | null): AnalyticsRange {
     : DEFAULT_ANALYTICS_RANGE;
 }
 
+/** "course" is the second tab; anything else falls back to the overview. */
+export type AnalyticsTab = "overview" | "course";
+
+/** What the viewer asked for, as raw strings that haven't been checked yet. */
+export type AnalyticsRequest = {
+  tab: string | null;
+  range: string | null;
+  instructor: string | null;
+  course: string | null;
+};
+
+/** A value that should be a row id, or null if it isn't one. */
+function parseId(value: string | null): number | null {
+  const id = Number(value);
+  return value !== null && Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/**
+ * What the viewer may see, narrowed from what they asked for.
+ *
+ * Instructors are pinned to their own figures; only an admin may look
+ * elsewhere, and null means "every instructor".
+ */
+export function resolveAnalyticsView(
+  requested: AnalyticsRequest,
+  viewer: { userId: number; isAdmin: boolean }
+) {
+  const tab: AnalyticsTab = requested.tab === "course" ? "course" : "overview";
+
+  return {
+    tab,
+    range: parseAnalyticsRange(requested.range),
+    instructorId: viewer.isAdmin
+      ? parseId(requested.instructor)
+      : viewer.userId,
+    // Not yet trusted: the course service checks it against the viewer's own
+    // courses.
+    requestedCourseId: parseId(requested.course),
+  };
+}
+
 const RANGE_DAYS: Record<Exclude<AnalyticsRange, "all">, number> = {
   "7d": 7,
   "30d": 30,
