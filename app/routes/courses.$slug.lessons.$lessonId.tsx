@@ -61,6 +61,7 @@ import {
   BookmarkCheck,
   Github,
   HelpCircle,
+  Lock,
   NotebookPen,
   MapPin,
   PlayCircle,
@@ -679,6 +680,17 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const viewer = await getViewer(request);
   const currentUserId = viewer?.userId ?? null;
+
+  // May they take the course? Only then does the response carry the lesson's
+  // video, body and quiz. A denial outside the purchase country is shown as
+  // its own block; any other denial shows the paywall preview.
+  const takeDecision = mayTakeCourse(viewer, course.id);
+  const canViewContent = takeDecision.allowed;
+  const outsidePurchaseCountry =
+    !takeDecision.allowed &&
+    takeDecision.reason.kind === "outside-purchase-country"
+      ? takeDecision.reason
+      : null;
   const enrolled =
     currentUserId !== null && isEnrolled(db, currentUserId, course.id);
   let lessonStatus: string | null = null;
@@ -717,16 +729,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     }
   }
 
-  // May they take the course? A denial outside the purchase country is shown
-  // as its own block; any other denial shows the paywall preview.
-  const takeDecision = mayTakeCourse(viewer, course.id);
-  const canViewContent = takeDecision.allowed;
-  const outsidePurchaseCountry =
-    !takeDecision.allowed &&
-    takeDecision.reason.kind === "outside-purchase-country"
-      ? takeDecision.reason
-      : null;
-
   // Comments are confidential to the course: only people who can read the
   // lesson can read the discussion on it.
   const instructor = getUserById(course.instructorId);
@@ -746,9 +748,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       : undefined;
 
   // Render lesson content from Markdown to HTML server-side
-  const contentHtml = lesson.content
-    ? await renderMarkdown(lesson.content)
-    : null;
+  const contentHtml =
+    canViewContent && lesson.content
+      ? await renderMarkdown(lesson.content)
+      : null;
 
   // Build prev/next navigation
   const allLessons = flattenCourseLessons(courseWithDetails);
@@ -758,7 +761,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
 
   // Check for quiz attached to this lesson
-  const quizRecord = getQuizByLessonId(lessonId);
+  const quizRecord = canViewContent ? getQuizByLessonId(lessonId) : undefined;
   let quiz: {
     id: number;
     title: string;
@@ -820,7 +823,13 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       id: mod.id,
       title: mod.title,
     },
-    lesson,
+    lesson: {
+      id: lesson.id,
+      title: lesson.title,
+      durationMinutes: lesson.durationMinutes,
+      githubRepoUrl: lesson.githubRepoUrl,
+      videoUrl: canViewContent ? lesson.videoUrl : null,
+    },
     contentHtml,
     lessonStatus,
     enrolled,
@@ -1203,7 +1212,24 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
             />
           )}
 
-          {!contentHtml && !lesson.videoUrl && (
+          {/* Paywall preview — the loader sent no video, body or quiz */}
+          {!canViewContent && (
+            <Card className="mb-8">
+              <CardContent className="py-12 text-center">
+                <Lock className="mx-auto mb-3 size-10 text-muted-foreground" />
+                <p className="mb-4 text-muted-foreground">
+                  {currentUserId
+                    ? "Enroll in this course to watch this lesson."
+                    : "Sign in and enroll in this course to watch this lesson."}
+                </p>
+                <Link to={`/courses/${course.slug}`}>
+                  <Button>View Course</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+
+          {canViewContent && !contentHtml && !lesson.videoUrl && (
             <Card className="mb-8">
               <CardContent className="py-12 text-center text-muted-foreground">
                 No content has been added to this lesson yet.

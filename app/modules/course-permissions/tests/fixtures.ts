@@ -55,6 +55,72 @@ export function createWorld() {
     enrol(userId, courseId);
   }
 
+  /** A Purchase on its own, without the Enrollment it would grant. */
+  function addPurchase(
+    userId: number,
+    courseId: number,
+    country: string | null,
+    createdAt?: string
+  ) {
+    return db
+      .insert(schema.purchases)
+      .values({ userId, courseId, amountPaid: 1000, country, createdAt })
+      .returning()
+      .get();
+  }
+
+  function approveRefund(purchaseId: number) {
+    db.insert(schema.refunds)
+      .values({
+        purchaseId,
+        status: schema.RefundStatus.Approved,
+        reason: "Changed my mind",
+        amountRefunded: 1000,
+        resolvedAt: new Date().toISOString(),
+      })
+      .run();
+  }
+
+  /** A Team Licence with one Unclaimed Seat, bought by a Team Admin. */
+  function buyTeamLicence(
+    teamAdminId: number,
+    courseId: number,
+    country: string | null,
+    createdAt?: string
+  ) {
+    const team = db.insert(schema.teams).values({}).returning().get();
+    db.insert(schema.teamMembers)
+      .values({
+        teamId: team.id,
+        userId: teamAdminId,
+        role: schema.TeamMemberRole.Admin,
+      })
+      .run();
+    const purchase = addPurchase(teamAdminId, courseId, country, createdAt);
+    const seat = db
+      .insert(schema.coupons)
+      .values({
+        teamId: team.id,
+        courseId,
+        code: `SEAT-${purchase.id}`,
+        purchaseId: purchase.id,
+      })
+      .returning()
+      .get();
+    return { purchase, seat };
+  }
+
+  /** Claim a Seat, which gives the Student an Enrollment. */
+  function claimSeat(seatId: number, userId: number) {
+    const seat = db
+      .update(schema.coupons)
+      .set({ redeemedByUserId: userId, redeemedAt: new Date().toISOString() })
+      .where(eq(schema.coupons.id, seatId))
+      .returning()
+      .get();
+    enrol(userId, seat.courseId);
+  }
+
   function deleteUser(userId: number) {
     db.delete(schema.users).where(eq(schema.users.id, userId)).run();
   }
@@ -66,5 +132,18 @@ export function createWorld() {
       .run();
   }
 
-  return { db, ...base, addUser, addCourse, enrol, buy, deleteUser, setRole };
+  return {
+    db,
+    ...base,
+    addUser,
+    addCourse,
+    enrol,
+    buy,
+    addPurchase,
+    approveRefund,
+    buyTeamLicence,
+    claimSeat,
+    deleteUser,
+    setRole,
+  };
 }
