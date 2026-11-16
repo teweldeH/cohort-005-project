@@ -152,16 +152,16 @@ describe("take the course", () => {
       it("checks a Team Admin against their Individual Purchase, not their Team Licence", () => {
         const course = discountedCourse();
         const teamAdmin = world.addUser(UserRole.Student);
-        world.buyTeamLicence(
-          teamAdmin.id,
-          course.id,
-          "IN",
-          "2026-01-01T00:00:00.000Z"
-        );
         world.addPurchase(
           teamAdmin.id,
           course.id,
           "US",
+          "2026-01-01T00:00:00.000Z"
+        );
+        world.buyTeamLicence(
+          teamAdmin.id,
+          course.id,
+          "IN",
           "2026-02-01T00:00:00.000Z"
         );
         world.enrol(teamAdmin.id, course.id);
@@ -196,6 +196,28 @@ describe("take the course", () => {
             currentCountry: "US",
           })
         );
+      });
+
+      it("never blocks a Student on a Claimed Seat of a discounted Team Licence", () => {
+        const course = discountedCourse();
+        const teamAdmin = world.addUser(UserRole.Student);
+        const { seat } = world.buyTeamLicence(teamAdmin.id, course.id, "IN");
+        world.claimSeat(seat.id, world.user.id);
+
+        expect(
+          mayTakeCourse(viewer(world.user.id, "US"), course.id, world.db)
+        ).toEqual(ALLOWED);
+      });
+
+      it("never blocks a Team Admin on a Seat they claimed from their own Team Licence", () => {
+        const course = discountedCourse();
+        const teamAdmin = world.addUser(UserRole.Student);
+        const { seat } = world.buyTeamLicence(teamAdmin.id, course.id, "IN");
+        world.claimSeat(seat.id, teamAdmin.id);
+
+        expect(
+          mayTakeCourse(viewer(teamAdmin.id, "US"), course.id, world.db)
+        ).toEqual(ALLOWED);
       });
     });
 
