@@ -1,10 +1,15 @@
 import { data } from "react-router";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import type { Route } from "./+types/api.video-tracking";
-import { getCurrentUserId } from "~/lib/session";
+import { mayTakeCourse } from "~/modules/course-permissions/permissions.server";
+import {
+  enforce,
+  requireViewer,
+} from "~/modules/course-permissions/route.server";
 import { parseJsonBody } from "~/lib/validation";
 import { db } from "~/db";
-import { videoWatchEvents } from "~/db/schema";
+import { lessons, modules, videoWatchEvents } from "~/db/schema";
 
 const videoTrackingSchema = z.object({
   lessonId: z.number(),
@@ -12,11 +17,19 @@ const videoTrackingSchema = z.object({
   positionSeconds: z.number(),
 });
 
+function getLessonCourseId(lessonId: number) {
+  return db
+    .select({ courseId: modules.courseId })
+    .from(lessons)
+    .innerJoin(modules, eq(lessons.moduleId, modules.id))
+    .where(eq(lessons.id, lessonId))
+    .get()?.courseId;
+}
+
+// Watch events feed Watched time, and so a course's Watch Limit for refunds:
+// only someone who may take the lesson's course may record them.
 export async function action({ request }: Route.ActionArgs) {
-  const currentUserId = await getCurrentUserId(request);
-  if (!currentUserId) {
-    throw data("Unauthorized", { status: 401 });
-  }
+  const viewer = await requireViewer(request);
 
   const parsed = await parseJsonBody(request, videoTrackingSchema);
 
@@ -26,10 +39,15 @@ export async function action({ request }: Route.ActionArgs) {
 
   const { lessonId, eventType, positionSeconds } = parsed.data;
 
-  db
-    .insert(videoWatchEvents)
+  const courseId = getLessonCourseId(lessonId);
+  if (courseId === undefined) {
+    throw data("Lesson not found", { status: 404 });
+  }
+  enforce(mayTakeCourse(viewer, courseId));
+
+  db.insert(videoWatchEvents)
     .values({
-      userId: currentUserId,
+      userId: viewer.userId,
       lessonId,
       eventType,
       positionSeconds,
