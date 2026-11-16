@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# Refuse the commit if typecheck or the tests fail. See AGENTS.md.
+npm run check
