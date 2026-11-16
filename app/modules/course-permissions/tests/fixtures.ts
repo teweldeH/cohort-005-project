@@ -55,6 +55,32 @@ export function createWorld() {
     enrol(userId, courseId);
   }
 
+  /** A Purchase on its own, without the Enrollment it would grant. */
+  function addPurchase(
+    userId: number,
+    courseId: number,
+    country: string | null,
+    createdAt?: string
+  ) {
+    return db
+      .insert(schema.purchases)
+      .values({ userId, courseId, amountPaid: 1000, country, createdAt })
+      .returning()
+      .get();
+  }
+
+  function approveRefund(purchaseId: number) {
+    db.insert(schema.refunds)
+      .values({
+        purchaseId,
+        status: schema.RefundStatus.Approved,
+        reason: "Changed my mind",
+        amountRefunded: 1000,
+        resolvedAt: new Date().toISOString(),
+      })
+      .run();
+  }
+
   function deleteUser(userId: number) {
     db.delete(schema.users).where(eq(schema.users.id, userId)).run();
   }
@@ -66,5 +92,16 @@ export function createWorld() {
       .run();
   }
 
-  return { db, ...base, addUser, addCourse, enrol, buy, deleteUser, setRole };
+  return {
+    db,
+    ...base,
+    addUser,
+    addCourse,
+    enrol,
+    buy,
+    addPurchase,
+    approveRefund,
+    deleteUser,
+    setRole,
+  };
 }

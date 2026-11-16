@@ -126,6 +126,30 @@ describe("take the course", () => {
       ).toEqual(ALLOWED);
     });
 
+    describe("which Purchase is checked (ADR-0013)", () => {
+      it("ignores a refunded discounted Purchase once the Student buys again at full price", () => {
+        const course = discountedCourse();
+        const discounted = world.addPurchase(
+          world.user.id,
+          course.id,
+          "IN",
+          "2026-01-01T00:00:00.000Z"
+        );
+        world.approveRefund(discounted.id);
+        world.addPurchase(
+          world.user.id,
+          course.id,
+          "US",
+          "2026-02-01T00:00:00.000Z"
+        );
+        world.enrol(world.user.id, course.id);
+
+        expect(
+          mayTakeCourse(viewer(world.user.id, "US"), course.id, world.db)
+        ).toEqual(ALLOWED);
+      });
+    });
+
     it("exempts the owning Instructor and Platform Admins", () => {
       const course = discountedCourse();
       const admin = world.addUser(UserRole.Admin);
