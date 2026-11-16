@@ -88,7 +88,9 @@ export async function requireInstructorOrAdmin(
   const viewer = await requireViewer(request, db);
   const role = findRole(db, viewer.userId);
   if (role !== UserRole.Instructor && role !== UserRole.Admin) {
-    throw data("Only instructors can access this page.", { status: 403 });
+    throw data("Only instructors and platform admins can open this page.", {
+      status: 403,
+    });
   }
   return { ...viewer, isAdmin: role === UserRole.Admin };
 }

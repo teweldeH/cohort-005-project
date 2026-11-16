@@ -23,7 +23,8 @@ export function denialStatusAndMessage(reason: DenialReason): {
     case "not-course-manager":
       return {
         status: 403,
-        message: "Only this course's instructor can do that.",
+        message:
+          "Only this course's instructor or a platform admin can do that.",
       };
   }
 }

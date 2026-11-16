@@ -16,16 +16,16 @@ export function PurchaseCountryNotice({
     <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950/30">
       <div className="mb-2 flex items-center gap-2 font-semibold">
         <ShieldAlert className="size-4 text-amber-500" />
-        Access Restricted
+        Not available from this country
       </div>
       <p className="mb-2 text-muted-foreground">
-        You purchased this course with a Purchasing Power Parity discount while
-        in <strong>{countryName(purchaseCountry)}</strong>, but you're currently
-        accessing from <strong>{countryName(currentCountry)}</strong>.
+        You bought this course with a purchase-country discount in{" "}
+        <strong>{countryName(purchaseCountry)}</strong>, but you're in{" "}
+        <strong>{countryName(currentCountry)}</strong> now.
       </p>
       <p className="text-muted-foreground">
-        PPP-discounted courses can only be accessed from the country where the
-        purchase was made.
+        A course bought at a discount can only be taken from the country it was
+        bought in.
       </p>
     </div>
   );

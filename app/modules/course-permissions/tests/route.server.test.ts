@@ -136,7 +136,7 @@ describe("denials become responses", () => {
       await thrown(requireCourseManager(request, world.course.id, world.db))
     ).toEqual({
       status: 403,
-      message: "Only this course's instructor can do that.",
+      message: "Only this course's instructor or a platform admin can do that.",
     });
   });
 
@@ -174,7 +174,7 @@ describe("requireInstructorOrAdmin", () => {
 
     expect(await thrown(requireInstructorOrAdmin(request, world.db))).toEqual({
       status: 403,
-      message: "Only instructors can access this page.",
+      message: "Only instructors and platform admins can open this page.",
     });
   });
 
