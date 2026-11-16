@@ -3,7 +3,6 @@ import { Link, useFetcher, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { z } from "zod";
 import type { Route } from "./+types/courses.$slug";
-import { getCurrentUserId } from "~/lib/session";
 import { db } from "~/db";
 import {
   courses,
@@ -11,7 +10,6 @@ import {
   users,
   modules,
   lessons,
-  enrollments,
   lessonProgress,
   courseRatings,
   LessonProgressStatus,
@@ -45,16 +43,15 @@ import { data, isRouteErrorResponse } from "react-router";
 import { formatDuration, formatPrice } from "~/lib/utils";
 import { renderMarkdown } from "~/lib/markdown.server";
 import { resolveCountry } from "~/lib/country.server";
-import {
-  calculatePppPrice,
-  getCountryTierInfo,
-} from "~/lib/ppp";
+import { calculatePppPrice, getCountryTierInfo } from "~/lib/ppp";
 import { parseFormData } from "~/lib/validation";
 import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
 import { StarRating, StarRatingInput } from "~/components/star-rating";
+import { PurchaseCountryNotice } from "~/components/purchase-country-notice";
 import { mayTakeCourse } from "~/modules/course-permissions/permissions.server";
 import {
   enforce,
+  getViewer,
   requireViewer,
 } from "~/modules/course-permissions/route.server";
 
@@ -135,17 +132,6 @@ function getLessonCountForCourse(courseId: number) {
     .get();
 
   return count?.count ?? 0;
-}
-
-function isUserEnrolled(userId: number, courseId: number) {
-  const enrollment = db
-    .select()
-    .from(enrollments)
-    .where(
-      and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
-    )
-    .get();
-  return !!enrollment;
 }
 
 function getCourseLessonIds(courseId: number): number[] {
@@ -307,7 +293,10 @@ function findRating(userId: number, courseId: number) {
     .select()
     .from(courseRatings)
     .where(
-      and(eq(courseRatings.userId, userId), eq(courseRatings.courseId, courseId))
+      and(
+        eq(courseRatings.userId, userId),
+        eq(courseRatings.courseId, courseId)
+      )
     )
     .get();
 }
@@ -393,33 +382,44 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   }
 
   const lessonCount = getLessonCountForCourse(course.id);
-  const currentUserId = await getCurrentUserId(request);
+  const viewer = await getViewer(request);
+  const currentUserId = viewer?.userId ?? null;
 
-  let enrolled = false;
+  const takeDecision = mayTakeCourse(viewer, course.id);
+  const canTakeCourse = takeDecision.allowed;
+  const outsidePurchaseCountry =
+    !takeDecision.allowed &&
+    takeDecision.reason.kind === "outside-purchase-country"
+      ? {
+          purchaseCountry: takeDecision.reason.purchaseCountry,
+          currentCountry: takeDecision.reason.currentCountry,
+        }
+      : null;
+
   let progress = 0;
   let lessonProgressMap: Record<number, string> = {};
   let nextLessonId: number | null = null;
   let refundOffer: RefundOffer | null = null;
 
-  if (currentUserId) {
-    enrolled = isUserEnrolled(currentUserId, course.id);
+  // A Student locked out by the purchase country still bought the course,
+  // so they keep the way to ask for their money back.
+  if (currentUserId && (canTakeCourse || outsidePurchaseCountry)) {
+    refundOffer = getRefundOffer(db, currentUserId, course.id, new Date());
+  }
 
-    if (enrolled) {
-      refundOffer = getRefundOffer(db, currentUserId, course.id, new Date());
+  if (currentUserId && canTakeCourse) {
+    progress = calculateProgress(currentUserId, course.id, false);
 
-      progress = calculateProgress(currentUserId, course.id, false);
-
-      const progressRecords = getLessonProgressForCourse(
-        currentUserId,
-        course.id
-      );
-      for (const record of progressRecords) {
-        lessonProgressMap[record.lessonId] = record.status;
-      }
-
-      const nextLesson = getNextIncompleteLesson(currentUserId, course.id);
-      nextLessonId = nextLesson?.id ?? null;
+    const progressRecords = getLessonProgressForCourse(
+      currentUserId,
+      course.id
+    );
+    for (const record of progressRecords) {
+      lessonProgressMap[record.lessonId] = record.status;
     }
+
+    const nextLesson = getNextIncompleteLesson(currentUserId, course.id);
+    nextLessonId = nextLesson?.id ?? null;
   }
 
   // Render sales copy from Markdown to HTML server-side
@@ -440,7 +440,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     course: courseWithDetails,
     salesCopyHtml,
     lessonCount,
-    enrolled,
+    canTakeCourse,
+    outsidePurchaseCountry,
     progress,
     lessonProgressMap,
     nextLessonId,
@@ -534,7 +535,8 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
     course,
     salesCopyHtml,
     lessonCount,
-    enrolled,
+    canTakeCourse,
+    outsidePurchaseCountry,
     progress,
     lessonProgressMap,
     nextLessonId,
@@ -702,7 +704,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
           />
 
           {/* Bottom CTA */}
-          {!enrolled && !isInstructor && (
+          {!canTakeCourse && !outsidePurchaseCountry && !isInstructor && (
             <div className="mt-8 rounded-lg border bg-muted/50 p-6">
               <h3 className="mb-2 text-lg font-semibold">
                 Ready to get started?
@@ -717,7 +719,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
           <div className="mt-8">
             <CourseContent
               course={course}
-              enrolled={enrolled}
+              canTakeCourse={canTakeCourse}
               isInstructor={isInstructor}
               lessonProgressMap={lessonProgressMap}
             />
@@ -731,9 +733,11 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
               <h2 className="text-lg font-semibold">
                 {isInstructor
                   ? "Your Course"
-                  : enrolled
+                  : canTakeCourse
                     ? "Your Progress"
-                    : "Get Started"}
+                    : outsidePurchaseCountry
+                      ? "Your Course"
+                      : "Get Started"}
               </h2>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -744,7 +748,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
                     Manage Course
                   </Button>
                 </Link>
-              ) : enrolled ? (
+              ) : canTakeCourse ? (
                 <>
                   <div className="mb-2 flex items-center justify-between text-sm">
                     <span>{progress}% complete</span>
@@ -779,6 +783,20 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
                     </Button>
                   </Link>
                   <RateCourse userRating={userRating} />
+                  {refundOffer && (
+                    <RequestRefund
+                      slug={course.slug}
+                      purchaseId={refundOffer.purchaseId}
+                      amount={refundOffer.amount}
+                    />
+                  )}
+                </>
+              ) : outsidePurchaseCountry ? (
+                <>
+                  <PurchaseCountryNotice
+                    purchaseCountry={outsidePurchaseCountry.purchaseCountry}
+                    currentCountry={outsidePurchaseCountry.currentCountry}
+                  />
                   {refundOffer && (
                     <RequestRefund
                       slug={course.slug}
@@ -931,7 +949,7 @@ function RequestRefund({
 
 function CourseContent({
   course,
-  enrolled,
+  canTakeCourse,
   isInstructor,
   lessonProgressMap,
 }: {
@@ -948,7 +966,7 @@ function CourseContent({
       }>;
     }>;
   };
-  enrolled: boolean;
+  canTakeCourse: boolean;
   isInstructor: boolean;
   lessonProgressMap: Record<number, string>;
 }) {
@@ -1012,7 +1030,7 @@ function CourseContent({
 
                     return (
                       <li key={lesson.id}>
-                        {enrolled ? (
+                        {canTakeCourse ? (
                           <Link
                             to={`/courses/${course.slug}/lessons/${lesson.id}`}
                             className="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-muted"
