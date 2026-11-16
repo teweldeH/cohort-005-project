@@ -5,6 +5,7 @@ import {
   getViewer,
   requireCourseManager,
   requireCourseTaker,
+  requireInstructorOrAdmin,
 } from "../route.server";
 import { createWorld, type World } from "./fixtures";
 
@@ -145,5 +146,44 @@ describe("denials become responses", () => {
     expect(
       await requireCourseManager(request, world.course.id, world.db)
     ).toEqual({ userId: world.instructor.id, country: null });
+  });
+});
+
+describe("requireInstructorOrAdmin", () => {
+  it("lets an Instructor in", async () => {
+    const request = await requestAs(world.instructor.id);
+
+    expect(await requireInstructorOrAdmin(request, world.db)).toMatchObject({
+      userId: world.instructor.id,
+      isAdmin: false,
+    });
+  });
+
+  it("lets a Platform Admin in, flagged as one", async () => {
+    const admin = world.addUser(UserRole.Admin);
+    const request = await requestAs(admin.id);
+
+    expect(await requireInstructorOrAdmin(request, world.db)).toMatchObject({
+      userId: admin.id,
+      isAdmin: true,
+    });
+  });
+
+  it("turns a Student away with a 403", async () => {
+    const request = await requestAs(world.user.id);
+
+    expect(await thrown(requireInstructorOrAdmin(request, world.db))).toEqual({
+      status: 403,
+      message: "Only instructors can access this page.",
+    });
+  });
+
+  it("turns a signed-out visitor away with a 401", async () => {
+    const request = await requestAs(null);
+
+    expect(await thrown(requireInstructorOrAdmin(request, world.db))).toEqual({
+      status: 401,
+      message: "Select a user from the DevUI panel.",
+    });
   });
 });

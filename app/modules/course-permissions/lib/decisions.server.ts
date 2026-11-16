@@ -136,3 +136,13 @@ export function userExists(db: Db, userId: number): boolean {
     .where(eq(users.id, userId))
     .get();
 }
+
+/** The user's platform role, or null if they no longer exist. */
+export function findRole(db: Db, userId: number): UserRole | null {
+  const user = db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .get();
+  return user?.role ?? null;
+}

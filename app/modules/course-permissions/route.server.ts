@@ -7,7 +7,9 @@ import { data } from "react-router";
 import { db as appDb } from "~/db";
 import { resolveCountry } from "~/lib/country.server";
 import { getCurrentUserId } from "~/lib/session";
+import { UserRole } from "~/db/schema";
 import {
+  findRole,
   userExists,
   type Db,
   type Decision,
@@ -73,4 +75,20 @@ export async function requireCourseManager(
   const viewer = await requireViewer(request, db);
   enforce(mayManageCourse(viewer, courseId, db));
   return viewer;
+}
+
+/**
+ * The signed-in Instructor or Platform Admin, for pages that span all of
+ * someone's courses rather than one. A 401 when signed out, a 403 otherwise.
+ */
+export async function requireInstructorOrAdmin(
+  request: Request,
+  db: Db = appDb
+): Promise<SignedInViewer & { isAdmin: boolean }> {
+  const viewer = await requireViewer(request, db);
+  const role = findRole(db, viewer.userId);
+  if (role !== UserRole.Instructor && role !== UserRole.Admin) {
+    throw data("Only instructors can access this page.", { status: 403 });
+  }
+  return { ...viewer, isAdmin: role === UserRole.Admin };
 }
