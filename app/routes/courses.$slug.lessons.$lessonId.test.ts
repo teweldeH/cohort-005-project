@@ -178,6 +178,21 @@ describe("lesson loader", () => {
     );
   });
 
+  it("doesn't mark progress for a Student outside the purchase country", async () => {
+    const response = await loadAs(discountBuyer.id, "US");
+
+    expect(response.lessonStatus).toBeNull();
+  });
+
+  it("marks the lesson in progress for a Student with an Enrollment", async () => {
+    const student = addStudent("viewer");
+    db.insert(schema.enrollments)
+      .values({ userId: student.id, courseId: course.id })
+      .run();
+
+    expect((await loadAs(student.id)).lessonStatus).toBe("in_progress");
+  });
+
   it("sends a Student with an Enrollment the full lesson", async () => {
     const response = await loadAs(enrolledStudent.id);
 
