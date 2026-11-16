@@ -987,6 +987,13 @@ export async function action({ params, request }: Route.ActionArgs) {
     if (isNaN(quizId)) {
       throw data("Invalid quiz ID", { status: 400 });
     }
+    enforce(mayTakeCourse(viewer, course.id));
+    requireLessonInCourse(lessonId, course.id);
+    // Scope the quiz to this lesson so taking this course can't score a quiz
+    // in another one.
+    if (getQuizByLessonId(lessonId)?.id !== quizId) {
+      throw data("Quiz not found", { status: 404 });
+    }
 
     // Collect answers: form fields named "question-{questionId}" with value = optionId
     const selectedAnswers: Record<number, number> = {};

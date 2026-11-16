@@ -56,9 +56,11 @@ const question = db
   })
   .returning()
   .get();
-db.insert(schema.quizOptions)
+const rightOption = db
+  .insert(schema.quizOptions)
   .values({ questionId: question.id, optionText: "Yes", isCorrect: true })
-  .run();
+  .returning()
+  .get();
 
 function addStudent(name: string) {
   return db
@@ -240,5 +242,67 @@ describe("marking a lesson complete", () => {
     expect(
       await refusal(actAs(base.instructor.id, { intent: "mark-complete" }))
     ).toBeNull();
+  });
+});
+
+describe("submitting a quiz", () => {
+  const answer = {
+    intent: "submit-quiz",
+    quizId: String(quiz.id),
+    [`question-${question.id}`]: String(rightOption.id),
+  };
+
+  it("is refused for a Student outside the purchase country, and records nothing", async () => {
+    const student = addStudent("away-quizzer");
+    db.insert(schema.purchases)
+      .values({
+        userId: student.id,
+        courseId: course.id,
+        amountPaid: 1000,
+        country: "IN",
+      })
+      .run();
+    db.insert(schema.enrollments)
+      .values({ userId: student.id, courseId: course.id })
+      .run();
+
+    const refused = await refusal(actAs(student.id, answer, "US"));
+
+    expect(refused?.status).toBe(403);
+    expect((await loadAs(student.id, "IN")).bestAttempt).toBeNull();
+  });
+
+  it("is refused for a Student without an Enrollment", async () => {
+    const refused = await refusal(
+      actAs(addStudent("unenrolled-quizzer").id, answer)
+    );
+
+    expect(refused?.status).toBe(403);
+  });
+
+  it("is allowed for a Student with an Enrollment", async () => {
+    const student = addStudent("quizzer");
+    db.insert(schema.enrollments)
+      .values({ userId: student.id, courseId: course.id })
+      .run();
+
+    await actAs(student.id, answer);
+
+    expect((await loadAs(student.id)).bestAttempt).toEqual({
+      score: 1,
+      passed: true,
+    });
+  });
+
+  it("is allowed for the Course Manager", async () => {
+    expect(await refusal(actAs(base.instructor.id, answer))).toBeNull();
+  });
+
+  it("is not found for a quiz that isn't on this lesson", async () => {
+    const refused = await refusal(
+      actAs(enrolledStudent.id, { ...answer, quizId: String(quiz.id + 999) })
+    );
+
+    expect(refused?.status).toBe(404);
   });
 });
