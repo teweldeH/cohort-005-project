@@ -1,7 +1,16 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, notExists } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "~/db/schema";
-import { courses, enrollments, purchases, users, UserRole } from "~/db/schema";
+import {
+  coupons,
+  courses,
+  enrollments,
+  purchases,
+  refunds,
+  RefundStatus,
+  users,
+  UserRole,
+} from "~/db/schema";
 import { checkPppAccess } from "~/lib/ppp";
 
 export type Db = BetterSQLite3Database<typeof schema>;
@@ -101,15 +110,7 @@ export function mayTakeCourse(
     .get();
   if (!enrollment) return deny({ kind: "no-enrollment" });
 
-  // The first Purchase row found, as before. Choosing the right Purchase
-  // (ADR-0013) is a follow-up.
-  const purchase = db
-    .select()
-    .from(purchases)
-    .where(
-      and(eq(purchases.userId, user.id), eq(purchases.courseId, course.id))
-    )
-    .get();
+  const purchase = findCheckedPurchase(db, user.id, course.id);
 
   const ppp = checkPppAccess(
     course.price,
@@ -126,6 +127,44 @@ export function mayTakeCourse(
   }
 
   return ALLOWED;
+}
+
+/**
+ * The Purchase whose country the purchase-country check uses (ADR-0013): the
+ * buyer's newest Individual Purchase of the course with no Approved Refund
+ * Request. A Student on a Claimed Seat has none of their own, so none is
+ * checked.
+ */
+function findCheckedPurchase(db: Db, userId: number, courseId: number) {
+  return db
+    .select({ country: purchases.country })
+    .from(purchases)
+    .where(
+      and(
+        eq(purchases.userId, userId),
+        eq(purchases.courseId, courseId),
+        // An Individual Purchase: a Team Licence is the Purchase that granted Seats.
+        notExists(
+          db
+            .select({ id: coupons.id })
+            .from(coupons)
+            .where(eq(coupons.purchaseId, purchases.id))
+        ),
+        notExists(
+          db
+            .select({ id: refunds.id })
+            .from(refunds)
+            .where(
+              and(
+                eq(refunds.purchaseId, purchases.id),
+                eq(refunds.status, RefundStatus.Approved)
+              )
+            )
+        )
+      )
+    )
+    .orderBy(desc(purchases.createdAt), desc(purchases.id))
+    .get();
 }
 
 /** Whether the user still exists — a session can outlive its user. */
