@@ -170,6 +170,33 @@ describe("take the course", () => {
           mayTakeCourse(viewer(teamAdmin.id, "US"), course.id, world.db)
         ).toEqual(ALLOWED);
       });
+
+      it("uses the newest of several unrefunded Individual Purchases", () => {
+        const course = discountedCourse();
+        world.addPurchase(
+          world.user.id,
+          course.id,
+          "US",
+          "2026-01-01T00:00:00.000Z"
+        );
+        world.addPurchase(
+          world.user.id,
+          course.id,
+          "IN",
+          "2026-02-01T00:00:00.000Z"
+        );
+        world.enrol(world.user.id, course.id);
+
+        expect(
+          mayTakeCourse(viewer(world.user.id, "US"), course.id, world.db)
+        ).toEqual(
+          denied({
+            kind: "outside-purchase-country",
+            purchaseCountry: "IN",
+            currentCountry: "US",
+          })
+        );
+      });
     });
 
     it("exempts the owning Instructor and Platform Admins", () => {

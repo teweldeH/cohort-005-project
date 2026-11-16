@@ -1,4 +1,4 @@
-import { and, eq, notExists } from "drizzle-orm";
+import { and, desc, eq, notExists } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "~/db/schema";
 import {
@@ -130,7 +130,10 @@ export function mayTakeCourse(
 }
 
 /**
- * The Purchase whose country the purchase-country check uses (ADR-0013).
+ * The Purchase whose country the purchase-country check uses (ADR-0013): the
+ * buyer's newest Individual Purchase of the course with no Approved Refund
+ * Request. A Student on a Claimed Seat has none of their own, so none is
+ * checked.
  */
 function findCheckedPurchase(db: Db, userId: number, courseId: number) {
   return db
@@ -160,6 +163,7 @@ function findCheckedPurchase(db: Db, userId: number, courseId: number) {
         )
       )
     )
+    .orderBy(desc(purchases.createdAt), desc(purchases.id))
     .get();
 }
 
