@@ -6,7 +6,7 @@ Do these checks in this order before you report a change to `app/` as complete:
 2. `npm run lint:boundaries`
 3. `npm run test`
 
-Or run all three with `npm run check`. The pre-commit hook (`.githooks/pre-commit`) runs `check` and also refuses any staged file over 10,000 tokens (bytes / 4): when it does, split the file the way its message says instead of trimming it.
+Or run all three with `npm run check`. The pre-commit hook (`.githooks/pre-commit`) refuses any staged file over 10,000 tokens (bytes / 4): when it does, split the file the way its message says instead of trimming it.
 
 Modules are deep modules: see [app/modules/README.md](./app/modules/README.md) before adding or importing one.
 

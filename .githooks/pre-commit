@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-# Refuse the commit unless the staged files pass the checks CI would run.
-# See AGENTS.md.
+# Fast checks on the staged files only. `npm run check` is too slow to run
+# on every commit; run it before you report a change as done. See AGENTS.md.
 set -e
 
 # Every staged file must fit in an agent's context in one read.
@@ -12,5 +12,3 @@ if ! git diff --cached --diff-filter=MD --quiet -- 'drizzle/*.sql'; then
   echo "Restore it and run \`npm run db:generate\` to add a new migration." >&2
   exit 1
 fi
-
-npm run check
