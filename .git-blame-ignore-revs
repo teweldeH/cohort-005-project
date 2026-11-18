@@ -3,3 +3,6 @@
 
 # Format the repo with Prettier
 429518517a66fe189e2682cc627d421c5f144c68
+
+# Apply ESLint autofixes
+5e7fc3a8efc22e56e58ab02e39eedcf1c22a316e
