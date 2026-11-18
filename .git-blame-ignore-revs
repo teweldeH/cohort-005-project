@@ -2,7 +2,7 @@
 # makes `git blame` skip them.
 
 # Format the repo with Prettier
-429518517a66fe189e2682cc627d421c5f144c68
+ad7dd78c0baa34fdf1b8073a4aa13c8aeac54dd1
 
 # Apply ESLint autofixes
-5e7fc3a8efc22e56e58ab02e39eedcf1c22a316e
+3bd84aebcd04b7c3bb29fd952573c42d0bb23edd
