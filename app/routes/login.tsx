@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import {
   Form,
   Link,
@@ -7,15 +8,14 @@ import {
 } from "react-router";
 import { redirect, data } from "react-router";
 import { z } from "zod";
-import type { Route } from "./+types/login";
-import { setCurrentUserId, getCurrentUserId } from "~/lib/session";
-import { parseFormData } from "~/lib/validation";
 import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
 import { Card, CardContent } from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
 import { db } from "~/db";
 import { users } from "~/db/schema";
-import { eq } from "drizzle-orm";
+import { setCurrentUserId, getCurrentUserId } from "~/lib/session";
+import { parseFormData } from "~/lib/validation";
+import type { Route } from "./+types/login";
 
 const loginSchema = z.object({
   email: z

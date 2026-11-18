@@ -1,13 +1,4 @@
-import { Link } from "react-router";
-import type { Route } from "./+types/instructor.$courseId.modules.$moduleId";
-import { coursePermissions } from "~/modules/permissions/course-permissions.server";
-import { users, courses, categories, modules, lessons } from "~/db/schema";
-import { db } from "~/db";
 import { eq, or } from "drizzle-orm";
-import { Card, CardContent } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { Skeleton } from "~/components/ui/skeleton";
-import { UserAvatar } from "~/components/user-avatar";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -18,8 +9,17 @@ import {
   FileText,
   Video,
 } from "lucide-react";
+import { Link } from "react-router";
 import { data, isRouteErrorResponse } from "react-router";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent } from "~/components/ui/card";
+import { Skeleton } from "~/components/ui/skeleton";
+import { UserAvatar } from "~/components/user-avatar";
+import { db } from "~/db";
+import { users, courses, categories, modules, lessons } from "~/db/schema";
 import { formatDuration } from "~/lib/utils";
+import { coursePermissions } from "~/modules/permissions/course-permissions.server";
+import type { Route } from "./+types/instructor.$courseId.modules.$moduleId";
 
 function getCourseWithDetails(id: number) {
   const course = db
@@ -71,16 +71,20 @@ function getCourseWithDetails(id: number) {
 
   return {
     ...course,
-    modules: courseModules.map((mod) => ({
-      ...mod,
-      lessons: courseLessons.filter((l) => l.moduleId === mod.id),
+    modules: courseModules.map((courseModule) => ({
+      ...courseModule,
+      lessons: courseLessons.filter((l) => l.moduleId === courseModule.id),
     })),
   };
 }
 
 function getModuleWithLessons(id: number) {
-  const mod = db.select().from(modules).where(eq(modules.id, id)).get();
-  if (!mod) return null;
+  const courseModule = db
+    .select()
+    .from(modules)
+    .where(eq(modules.id, id))
+    .get();
+  if (!courseModule) return null;
 
   const moduleLessons = db
     .select()
@@ -89,7 +93,7 @@ function getModuleWithLessons(id: number) {
     .orderBy(lessons.position)
     .all();
 
-  return { ...mod, lessons: moduleLessons };
+  return { ...courseModule, lessons: moduleLessons };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -164,7 +168,12 @@ export function HydrateFallback() {
 export default function InstructorModulePreview({
   loaderData,
 }: Route.ComponentProps) {
-  const { course, module: mod, totalLessons, totalDuration } = loaderData;
+  const {
+    course,
+    module: courseModule,
+    totalLessons,
+    totalDuration,
+  } = loaderData;
 
   return (
     <div className="mx-auto max-w-4xl p-6 lg:p-8">
@@ -179,9 +188,9 @@ export default function InstructorModulePreview({
             {course.title}
           </Link>
           <span>/</span>
-          <span className="text-foreground">{mod.title}</span>
+          <span className="text-foreground">{courseModule.title}</span>
         </nav>
-        <Link to={`/courses/${course.slug}/${mod.id}`}>
+        <Link to={`/courses/${course.slug}/${courseModule.id}`}>
           <Button variant="outline" size="sm">
             <ExternalLink className="mr-1 size-3.5" />
             Student View
@@ -190,7 +199,7 @@ export default function InstructorModulePreview({
       </div>
 
       {/* Module title and stats */}
-      <h1 className="mb-2 text-3xl font-bold">{mod.title}</h1>
+      <h1 className="mb-2 text-3xl font-bold">{courseModule.title}</h1>
       <div className="mb-6 flex items-center gap-4 text-sm text-muted-foreground">
         <span className="flex items-center gap-1">
           <BookOpen className="size-4" />
@@ -227,13 +236,13 @@ export default function InstructorModulePreview({
 
       {/* Lesson list */}
       <h2 className="mb-4 text-xl font-semibold">Lessons</h2>
-      {mod.lessons.length === 0 ? (
+      {courseModule.lessons.length === 0 ? (
         <p className="text-muted-foreground">
           No lessons have been added to this module yet.
         </p>
       ) : (
         <div className="space-y-1">
-          {mod.lessons.map((lesson) => {
+          {courseModule.lessons.map((lesson) => {
             const hasVideo = !!lesson.videoUrl;
 
             return (

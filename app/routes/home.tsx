@@ -1,14 +1,5 @@
-import { Link } from "react-router";
-import { useState, useEffect } from "react";
-import type { Route } from "./+types/home";
-import { Button } from "~/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-} from "~/components/ui/card";
-import { CourseStatus } from "~/db/schema";
+import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
+import { eq, like, and, or, sql } from "drizzle-orm";
 import {
   BookOpen,
   GraduationCap,
@@ -18,13 +9,22 @@ import {
   Moon,
   Sun,
 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link } from "react-router";
 import { CourseImage } from "~/components/course-image";
 import { DevUI } from "~/components/dev-ui";
-import { getCurrentUserId, getDevCountry } from "~/lib/session";
-import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
-import { eq, like, and, or, sql } from "drizzle-orm";
+import { Button } from "~/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "~/components/ui/card";
 import { db } from "~/db";
+import { CourseStatus } from "~/db/schema";
 import { courses, categories, users, modules, lessons } from "~/db/schema";
+import { getCurrentUserId, getDevCountry } from "~/lib/session";
+import type { Route } from "./+types/home";
 
 function getAllUsers() {
   return db.select().from(users).all();

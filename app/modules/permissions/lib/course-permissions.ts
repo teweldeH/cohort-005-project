@@ -1,5 +1,5 @@
-import { data } from "react-router";
 import { and, eq } from "drizzle-orm";
+import { data } from "react-router";
 import { courses, enrollments, lessons, modules } from "~/db/schema";
 import { checkCountryLock, countryName } from "~/lib/ppp";
 import { getNewestIndividualPurchase } from "~/lib/refunds.server";
@@ -193,12 +193,12 @@ function parseId(id: Id): number | null {
 }
 
 function courseIdOfModule(db: Db, moduleId: number): number | null {
-  const mod = db
+  const courseModule = db
     .select({ courseId: modules.courseId })
     .from(modules)
     .where(eq(modules.id, moduleId))
     .get();
-  return mod?.courseId ?? null;
+  return courseModule?.courseId ?? null;
 }
 
 function courseIdOfLesson(db: Db, lessonId: number): number | null {

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createTestDb, seedBaseData, type TestDb } from "~/test/setup";
 import * as schema from "~/db/schema";
 import { UserRole } from "~/db/schema";
+import { createTestDb, seedBaseData, type TestDb } from "~/test/setup";
 import {
   isBookmarked,
   listBookmarks,

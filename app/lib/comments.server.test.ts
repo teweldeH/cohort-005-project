@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createTestDb, seedBaseData, type TestDb } from "~/test/setup";
 import * as schema from "~/db/schema";
+import { createTestDb, seedBaseData, type TestDb } from "~/test/setup";
 import { createComment, deleteComment, editComment } from "./comments.server";
+import type { NotificationKind } from "./notification-feed";
 import {
   fakeNotifications,
   type FakeNotifications,
   type SentNotification,
 } from "./notifications.fake.server";
-import type { NotificationKind } from "./notification-feed";
 
 const NOW = new Date(2026, 9, 6, 12, 0, 0);
 

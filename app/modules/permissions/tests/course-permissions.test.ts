@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { createTestDb, seedBaseData, type TestDb } from "~/test/setup";
 import { eq } from "drizzle-orm";
+import { describe, it, expect, beforeEach } from "vitest";
 import * as schema from "~/db/schema";
 import { setCurrentUserId } from "~/lib/session";
+import { createTestDb, seedBaseData, type TestDb } from "~/test/setup";
 import { createCoursePermissions } from "../course-permissions.server";
 import type { Person } from "../person.server";
 
@@ -494,8 +494,8 @@ describe("decide: course references", () => {
   });
 
   it("accepts a lesson or module id that belongs to the course", () => {
-    const mod = addModule();
-    const lesson = addLesson(mod.id);
+    const courseModule = addModule();
+    const lesson = addLesson(courseModule.id);
 
     expect(
       permissions.decide(owningInstructor(), {
@@ -506,7 +506,7 @@ describe("decide: course references", () => {
     expect(
       permissions.decide(owningInstructor(), {
         courseId: String(base.course.id),
-        moduleId: String(mod.id),
+        moduleId: String(courseModule.id),
       })
     ).toMatchObject({ found: true });
   });
@@ -542,8 +542,8 @@ describe("decide: course references", () => {
   });
 
   it("gives not found for a malformed id", () => {
-    const mod = addModule();
-    addLesson(mod.id);
+    const courseModule = addModule();
+    addLesson(courseModule.id);
 
     for (const malformed of ["abc", "1.5", "-1", "0", "", "1e2"]) {
       expect(

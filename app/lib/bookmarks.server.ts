@@ -1,6 +1,6 @@
+import { and, desc, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "~/db/schema";
-import { and, desc, eq } from "drizzle-orm";
 import { bookmarks, courses, lessons, modules } from "~/db/schema";
 import { savedLessonColumns } from "~/lib/saved-lesson.server";
 

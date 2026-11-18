@@ -133,6 +133,8 @@ export default tseslint.config(
             dev: false,
             i: false,
             j: false,
+            // A course Module, not a JS module.
+            mod: { module: false, courseModule: true },
             params: false,
             prop: false,
             props: false,

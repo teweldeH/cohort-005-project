@@ -1,16 +1,9 @@
+import { eq, and, or, sql, desc } from "drizzle-orm";
 import { Outlet } from "react-router";
-import type { Route } from "./+types/layout.app";
-import { Sidebar } from "~/components/sidebar";
+import { Toaster } from "sonner";
 import { DevUI } from "~/components/dev-ui";
 import { NotificationFeedProvider } from "~/components/notification-feed";
-import {
-  defaultNotifications,
-  tolerateNotificationFailure,
-} from "~/lib/notifications.server";
-import { Toaster } from "sonner";
-import { getCurrentUserId, getDevCountry } from "~/lib/session";
-import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
-import { eq, and, or, sql, desc } from "drizzle-orm";
+import { Sidebar } from "~/components/sidebar";
 import { db } from "~/db";
 import {
   users,
@@ -23,6 +16,13 @@ import {
   TeamMemberRole,
   LessonProgressStatus,
 } from "~/db/schema";
+import {
+  defaultNotifications,
+  tolerateNotificationFailure,
+} from "~/lib/notifications.server";
+import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
+import { getCurrentUserId, getDevCountry } from "~/lib/session";
+import type { Route } from "./+types/layout.app";
 
 function getAllUsers() {
   return db.select().from(users).all();
@@ -156,7 +156,7 @@ function getTotalLessonCount(courseId: number) {
   return getCourseLessonIds(courseId).length;
 }
 
-function getRecentlyProgressedCourses(userId: number, limit: number = 3) {
+function getRecentlyProgressedCourses(userId: number, limit = 3) {
   return db
     .select({
       courseId: courses.id,

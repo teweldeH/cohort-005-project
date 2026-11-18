@@ -1,12 +1,12 @@
+import { Bookmark, NotebookPen } from "lucide-react";
 import { Link } from "react-router";
-import type { Route } from "./+types/saved";
+import { Card, CardContent } from "~/components/ui/card";
 import { db } from "~/db";
-import { people } from "~/modules/permissions/person.server";
 import { listBookmarks } from "~/lib/bookmarks.server";
 import { listNotes } from "~/lib/notes.server";
-import { Card, CardContent } from "~/components/ui/card";
-import { Bookmark, NotebookPen } from "lucide-react";
 import { formatRelativeTime } from "~/lib/utils";
+import { people } from "~/modules/permissions/person.server";
+import type { Route } from "./+types/saved";
 
 export function meta() {
   return [

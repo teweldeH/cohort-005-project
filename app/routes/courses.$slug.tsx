@@ -1,32 +1,4 @@
-import { useEffect, useState } from "react";
-import { Link, useFetcher, useSearchParams } from "react-router";
-import { toast } from "sonner";
-import { z } from "zod";
-import type { Route } from "./+types/courses.$slug";
-import { coursePermissions } from "~/modules/permissions/course-permissions.server";
-import { db } from "~/db";
-import {
-  courses,
-  categories,
-  users,
-  modules,
-  lessons,
-  lessonProgress,
-  courseRatings,
-  LessonProgressStatus,
-} from "~/db/schema";
 import { eq, and, or, sql } from "drizzle-orm";
-import { getRefundOffer, type RefundOffer } from "~/lib/refunds.server";
-import { Card, CardContent, CardHeader } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { Skeleton } from "~/components/ui/skeleton";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-  TabsContentNoShift,
-} from "~/components/ui/tabs";
 import {
   AlertTriangle,
   BookOpen,
@@ -38,17 +10,45 @@ import {
   ShieldAlert,
   Users,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useFetcher, useSearchParams } from "react-router";
+import { data, isRouteErrorResponse } from "react-router";
+import { toast } from "sonner";
+import { z } from "zod";
 import { CourseImage } from "~/components/course-image";
+import { StarRating, StarRatingInput } from "~/components/star-rating";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
+import {
+  courses,
+  categories,
+  users,
+  modules,
+  lessons,
+  lessonProgress,
+  courseRatings,
+  LessonProgressStatus,
+} from "~/db/schema";
+import { getRefundOffer, type RefundOffer } from "~/lib/refunds.server";
+import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  TabsContentNoShift,
+} from "~/components/ui/tabs";
 import { UserAvatar } from "~/components/user-avatar";
 import { Textarea } from "~/components/ui/textarea";
-import { data, isRouteErrorResponse } from "react-router";
+import { db } from "~/db";
 import { formatDuration, formatPrice } from "~/lib/utils";
-import { renderMarkdown } from "~/lib/markdown.server";
 import { resolveCountry } from "~/lib/country.server";
+import { renderMarkdown } from "~/lib/markdown.server";
 import { calculatePppPrice, countryName, getCountryTierInfo } from "~/lib/ppp";
-import { parseFormData } from "~/lib/validation";
 import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
-import { StarRating, StarRatingInput } from "~/components/star-rating";
+import { parseFormData } from "~/lib/validation";
+import { coursePermissions } from "~/modules/permissions/course-permissions.server";
+import type { Route } from "./+types/courses.$slug";
 
 function getCourseWithDetails(id: number) {
   const course = db
@@ -100,9 +100,9 @@ function getCourseWithDetails(id: number) {
 
   return {
     ...course,
-    modules: courseModules.map((mod) => ({
-      ...mod,
-      lessons: courseLessons.filter((l) => l.moduleId === mod.id),
+    modules: courseModules.map((courseModule) => ({
+      ...courseModule,
+      lessons: courseLessons.filter((l) => l.moduleId === courseModule.id),
     })),
   };
 }
@@ -244,11 +244,11 @@ function getNextIncompleteLesson(userId: number, courseId: number) {
 
   if (courseModules.length === 0) return null;
 
-  for (const mod of courseModules) {
+  for (const courseModule of courseModules) {
     const moduleLessons = db
       .select()
       .from(lessons)
-      .where(eq(lessons.moduleId, mod.id))
+      .where(eq(lessons.moduleId, courseModule.id))
       .orderBy(lessons.position)
       .all();
 
@@ -537,9 +537,9 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
     if (searchParams.get("already_enrolled") === "1") {
       toast.info("You're already enrolled in this course.");
       setSearchParams(
-        (prev) => {
-          prev.delete("already_enrolled");
-          return prev;
+        (previous) => {
+          previous.delete("already_enrolled");
+          return previous;
         },
         { replace: true }
       );
@@ -547,8 +547,9 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
   }, [searchParams, setSearchParams]);
 
   const totalDuration = course.modules.reduce(
-    (sum, mod) =>
-      sum + mod.lessons.reduce((s, l) => s + (l.durationMinutes ?? 0), 0),
+    (sum, courseModule) =>
+      sum +
+      courseModule.lessons.reduce((s, l) => s + (l.durationMinutes ?? 0), 0),
     0
   );
 
@@ -966,24 +967,24 @@ function CourseContent({
         </p>
       ) : (
         <div className="space-y-4">
-          {course.modules.map((mod) => (
-            <Card key={mod.id}>
+          {course.modules.map((courseModule) => (
+            <Card key={courseModule.id}>
               <CardHeader>
                 <h3 className="font-semibold">
                   <Link
-                    to={`/courses/${course.slug}/${mod.id}`}
+                    to={`/courses/${course.slug}/${courseModule.id}`}
                     className="hover:underline"
                   >
-                    {mod.title}
+                    {courseModule.title}
                   </Link>
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  {mod.lessons.length} lessons
+                  {courseModule.lessons.length} lessons
                 </p>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {mod.lessons.map((lesson) => {
+                  {courseModule.lessons.map((lesson) => {
                     const status = lessonProgressMap[lesson.id];
                     const isCompleted =
                       status === LessonProgressStatus.Completed;

@@ -1,3 +1,5 @@
+import type { EditorProps, OnMount } from "@monaco-editor/react";
+import type * as Monaco from "monaco-editor";
 import {
   useRef,
   useCallback,
@@ -5,14 +7,12 @@ import {
   useEffect,
   type ComponentType,
 } from "react";
-import type { EditorProps, OnMount } from "@monaco-editor/react";
-import type * as Monaco from "monaco-editor";
 
-interface MonacoMarkdownEditorProps {
+type MonacoMarkdownEditorProps = {
   value: string;
   onChange: (value: string) => void;
   onSave?: () => void;
-}
+};
 
 export function MonacoMarkdownEditor({
   value,
@@ -28,8 +28,8 @@ export function MonacoMarkdownEditor({
   const [Editor, setEditor] = useState<ComponentType<EditorProps> | null>(null);
 
   useEffect(() => {
-    import("@monaco-editor/react").then((mod) => {
-      setEditor(() => mod.default);
+    import("@monaco-editor/react").then((editorPackage) => {
+      setEditor(() => editorPackage.default);
     });
   }, []);
 

@@ -1,14 +1,4 @@
-import { useState, useEffect } from "react";
-import { Link, useFetcher, useBlocker } from "react-router";
-import { toast } from "sonner";
-import type { Route } from "./+types/instructor.$courseId.lessons.$lessonId";
-import { coursePermissions } from "~/modules/permissions/course-permissions.server";
-import { modules, lessons, quizzes } from "~/db/schema";
-import { db } from "~/db";
 import { eq } from "drizzle-orm";
-import { Card, CardContent, CardHeader } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { MonacoMarkdownEditor } from "~/components/monaco-markdown-editor";
 import {
@@ -19,9 +9,19 @@ import {
   Github,
   Save,
 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useFetcher, useBlocker } from "react-router";
 import { data, isRouteErrorResponse } from "react-router";
+import { toast } from "sonner";
 import { z } from "zod";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import { db } from "~/db";
+import { modules, lessons, quizzes } from "~/db/schema";
 import { parseFormData } from "~/lib/validation";
+import { coursePermissions } from "~/modules/permissions/course-permissions.server";
+import type { Route } from "./+types/instructor.$courseId.lessons.$lessonId";
 
 const updateLessonSchema = z.object({
   intent: z.literal("update-lesson"),
@@ -45,9 +45,10 @@ function getLessonById(id: number) {
  */
 function getLessonWithModule(lessonId: number) {
   const lesson = getLessonById(lessonId);
-  const mod = lesson && getModuleById(lesson.moduleId);
-  if (!lesson || !mod) throw data("Lesson not found.", { status: 404 });
-  return { lesson, module: mod };
+  const courseModule = lesson && getModuleById(lesson.moduleId);
+  if (!lesson || !courseModule)
+    throw data("Lesson not found.", { status: 404 });
+  return { lesson, module: courseModule };
 }
 
 function getQuizByLessonId(lessonId: number) {
@@ -95,12 +96,14 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     "manage",
     { courseId: params.courseId, lessonId: params.lessonId }
   );
-  const { lesson, module: mod } = getLessonWithModule(Number(params.lessonId));
+  const { lesson, module: courseModule } = getLessonWithModule(
+    Number(params.lessonId)
+  );
   const lessonId = lesson.id;
 
   const quiz = getQuizByLessonId(lessonId);
 
-  return { course, lesson, module: mod, quiz };
+  return { course, lesson, module: courseModule, quiz };
 }
 
 export async function action({ params, request }: Route.ActionArgs) {
@@ -125,10 +128,12 @@ export async function action({ params, request }: Route.ActionArgs) {
     const {
       content,
       videoUrl,
-      durationMinutes: durationStr,
+      durationMinutes: durationString,
       githubRepoUrl,
     } = parsed.data;
-    const durationMinutes = durationStr ? parseInt(durationStr, 10) : null;
+    const durationMinutes = durationString
+      ? parseInt(durationString, 10)
+      : null;
 
     if (
       durationMinutes !== null &&
@@ -157,7 +162,7 @@ export async function action({ params, request }: Route.ActionArgs) {
 export default function InstructorLessonEditor({
   loaderData,
 }: Route.ComponentProps) {
-  const { course, lesson, module: mod, quiz } = loaderData;
+  const { course, lesson, module: courseModule, quiz } = loaderData;
   const fetcher = useFetcher();
 
   const [content, setContent] = useState(lesson.content ?? "");
@@ -265,7 +270,7 @@ export default function InstructorLessonEditor({
           </Link>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Module: {mod.title}
+          Module: {courseModule.title}
         </p>
       </div>
 

@@ -1,4 +1,13 @@
 import {
+  Bell,
+  Check,
+  GraduationCap,
+  MessageSquare,
+  Receipt,
+  Settings,
+  UsersRound,
+} from "lucide-react";
+import {
   createContext,
   useContext,
   useEffect,
@@ -9,16 +18,6 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router";
 import { z } from "zod";
-import {
-  Bell,
-  Check,
-  GraduationCap,
-  MessageSquare,
-  Receipt,
-  Settings,
-  UsersRound,
-} from "lucide-react";
-import { cn } from "~/lib/utils";
 import { UserAvatar } from "~/components/user-avatar";
 import {
   badgeLabel,
@@ -29,6 +28,7 @@ import {
   type FeedState,
   type NotificationFeed,
 } from "~/lib/notification-feed";
+import { cn } from "~/lib/utils";
 
 // ─── Notification Feed ───
 // The bell in the sidebar header and its popover (variant A2 from

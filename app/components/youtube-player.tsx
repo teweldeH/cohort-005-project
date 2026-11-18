@@ -45,9 +45,9 @@ function loadYouTubeAPI(): Promise<void> {
     );
     if (existingScript) {
       // Script exists but YT not ready yet — wait for the callback
-      const prev = window.onYouTubeIframeAPIReady;
+      const previous = window.onYouTubeIframeAPIReady;
       window.onYouTubeIframeAPIReady = () => {
-        prev?.();
+        previous?.();
         resolve();
       };
       return;
@@ -108,7 +108,7 @@ export function YouTubePlayer({
     if (duration > 0) {
       setVideoDuration(duration);
       const pct = Math.min(Math.round((currentTime / duration) * 100), 100);
-      setProgress((prev) => Math.max(prev, pct));
+      setProgress((previous) => Math.max(previous, pct));
     }
   }, []);
 

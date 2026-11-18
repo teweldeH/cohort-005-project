@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import {
   Form,
   Link,
@@ -7,17 +8,16 @@ import {
 } from "react-router";
 import { redirect, data } from "react-router";
 import { z } from "zod";
-import type { Route } from "./+types/signup";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import { db } from "~/db";
 import { UserRole, users } from "~/db/schema";
+import { syncUser } from "~/lib/notification-preferences.server";
+import { defaultNotifications } from "~/lib/notifications.server";
 import { setCurrentUserId, getCurrentUserId } from "~/lib/session";
 import { parseFormData } from "~/lib/validation";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Card, CardContent, CardHeader } from "~/components/ui/card";
-import { db } from "~/db";
-import { eq } from "drizzle-orm";
-import { defaultNotifications } from "~/lib/notifications.server";
-import { syncUser } from "~/lib/notification-preferences.server";
+import type { Route } from "./+types/signup";
 
 const signupSchema = z.object({
   name: z.string().trim().min(1, "Name is required."),

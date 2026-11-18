@@ -1,3 +1,5 @@
+import { eq, like, and, or, sql, inArray } from "drizzle-orm";
+import { AlertTriangle, BookOpen, Search } from "lucide-react";
 import {
   Form,
   Link,
@@ -5,7 +7,18 @@ import {
   useNavigation,
   isRouteErrorResponse,
 } from "react-router";
-import type { Route } from "./+types/courses";
+import { CourseImage } from "~/components/course-image";
+import { calculatePppPrice } from "~/lib/ppp";
+import { StarRating } from "~/components/star-rating";
+import { Button } from "~/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "~/components/ui/card";
+import { Skeleton } from "~/components/ui/skeleton";
+import { UserAvatar } from "~/components/user-avatar";
 import { db } from "~/db";
 import {
   courses as coursesTable,
@@ -19,23 +32,10 @@ import {
   CourseStatus,
   LessonProgressStatus,
 } from "~/db/schema";
-import { eq, like, and, or, sql, inArray } from "drizzle-orm";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-} from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { Skeleton } from "~/components/ui/skeleton";
-import { AlertTriangle, BookOpen, Search } from "lucide-react";
-import { CourseImage } from "~/components/course-image";
-import { UserAvatar } from "~/components/user-avatar";
+import { resolveCountry } from "~/lib/country.server";
 import { getCurrentUserId } from "~/lib/session";
 import { formatPrice } from "~/lib/utils";
-import { resolveCountry } from "~/lib/country.server";
-import { calculatePppPrice } from "~/lib/ppp";
-import { StarRating } from "~/components/star-rating";
+import type { Route } from "./+types/courses";
 
 function buildCourseQuery(
   search: string | null,

@@ -1,9 +1,22 @@
-import { Link, useFetcher, redirect, useSearchParams } from "react-router";
+import crypto from "crypto";
+import { eq, and, or, sql } from "drizzle-orm";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  TabsContentNoShift,
+} from "~/components/ui/tabs";
+import { BookOpen, Clock, Users, ArrowLeft, Minus, Plus } from "lucide-react";
 import { useState, useEffect } from "react";
+import { Link, useFetcher, redirect, useSearchParams } from "react-router";
+import { data } from "react-router";
 import { toast } from "sonner";
 import { z } from "zod";
-import type { Route } from "./+types/courses.$slug.purchase";
-import { people } from "~/modules/permissions/person.server";
+import { CourseImage } from "~/components/course-image";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent } from "~/components/ui/card";
+import { UserAvatar } from "~/components/user-avatar";
 import { db } from "~/db";
 import {
   courses,
@@ -19,27 +32,14 @@ import {
   CourseStatus,
   TeamMemberRole,
 } from "~/db/schema";
-import { eq, and, or, sql } from "drizzle-orm";
-import crypto from "crypto";
-import { Card, CardContent } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-  TabsContentNoShift,
-} from "~/components/ui/tabs";
-import { BookOpen, Clock, Users, ArrowLeft, Minus, Plus } from "lucide-react";
-import { CourseImage } from "~/components/course-image";
-import { UserAvatar } from "~/components/user-avatar";
-import { data } from "react-router";
-import { formatDuration, formatPrice } from "~/lib/utils";
 import { resolveCountry } from "~/lib/country.server";
-import { calculatePppPrice, getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
-import { parseFormData, parseParams } from "~/lib/validation";
 import { enrollStudent, isEnrolled } from "~/lib/enrollments.server";
 import { defaultNotifications } from "~/lib/notifications.server";
+import { calculatePppPrice, getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
+import { formatDuration, formatPrice } from "~/lib/utils";
+import { parseFormData, parseParams } from "~/lib/validation";
+import { people } from "~/modules/permissions/person.server";
+import type { Route } from "./+types/courses.$slug.purchase";
 
 function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
@@ -95,9 +95,9 @@ function getCourseWithDetails(id: number) {
 
   return {
     ...course,
-    modules: courseModules.map((mod) => ({
-      ...mod,
-      lessons: courseLessons.filter((l) => l.moduleId === mod.id),
+    modules: courseModules.map((courseModule) => ({
+      ...courseModule,
+      lessons: courseLessons.filter((l) => l.moduleId === courseModule.id),
     })),
   };
 }
@@ -265,8 +265,9 @@ export async function loader({ params, request, url }: Route.LoaderArgs) {
   const enrollmentCount = getEnrollmentCountForCourse(course.id);
 
   const totalDuration = courseWithDetails.modules.reduce(
-    (sum, mod) =>
-      sum + mod.lessons.reduce((s, l) => s + (l.durationMinutes ?? 0), 0),
+    (sum, courseModule) =>
+      sum +
+      courseModule.lessons.reduce((s, l) => s + (l.durationMinutes ?? 0), 0),
     0
   );
 

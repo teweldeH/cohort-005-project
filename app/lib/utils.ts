@@ -60,17 +60,19 @@ export function formatDuration(
   if (showHours && minutes >= 60) {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
-    const hStr = padZeros ? String(h).padStart(2, "0") : String(h);
-    const mStr = padZeros ? String(m).padStart(2, "0") : String(m);
+    const hourString = padZeros ? String(h).padStart(2, "0") : String(h);
+    const minuteString = padZeros ? String(m).padStart(2, "0") : String(m);
     if (showSeconds) {
-      return `${hStr}h ${mStr}m 00s`;
+      return `${hourString}h ${minuteString}m 00s`;
     }
-    return m > 0 ? `${hStr}h ${mStr}m` : `${hStr}h`;
+    return m > 0 ? `${hourString}h ${minuteString}m` : `${hourString}h`;
   }
 
-  const mStr = padZeros ? String(minutes).padStart(2, "0") : String(minutes);
+  const minuteString = padZeros
+    ? String(minutes).padStart(2, "0")
+    : String(minutes);
   if (showSeconds) {
-    return `${mStr}m 00s`;
+    return `${minuteString}m 00s`;
   }
-  return `${mStr}m`;
+  return `${minuteString}m`;
 }

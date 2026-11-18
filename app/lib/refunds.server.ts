@@ -26,7 +26,6 @@ import {
   RefundStatus,
   UserRole,
 } from "~/db/schema";
-import { formatPrice } from "~/lib/utils";
 import {
   sendSafely,
   toNotificationPerson,
@@ -38,6 +37,7 @@ import {
   REFUND_WINDOW_DAYS,
   type RuleBreak,
 } from "~/lib/refund-rules";
+import { formatPrice } from "~/lib/utils";
 
 // docs/adr/0001–0004 explain why Refunds work the way they do.
 

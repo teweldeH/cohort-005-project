@@ -1,18 +1,17 @@
+import { eq } from "drizzle-orm";
+import { AlertTriangle, Pencil, Shield, Users } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useFetcher } from "react-router";
+import { data, isRouteErrorResponse, Link } from "react-router";
 import { toast } from "sonner";
 import { z } from "zod";
-import type { Route } from "./+types/admin.users";
-import { people } from "~/modules/permissions/person.server";
-import { parseFormData } from "~/lib/validation";
-import { UserRole, users } from "~/db/schema";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
+import { Skeleton } from "~/components/ui/skeleton";
 import { db } from "~/db";
-import { eq } from "drizzle-orm";
+import { UserRole, users } from "~/db/schema";
 import { defaultNotifications } from "~/lib/notifications.server";
 import { syncUser } from "~/lib/notification-preferences.server";
-import { Card, CardContent, CardHeader } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { Skeleton } from "~/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -20,8 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { AlertTriangle, Pencil, Shield, Users } from "lucide-react";
-import { data, isRouteErrorResponse, Link } from "react-router";
+import { parseFormData } from "~/lib/validation";
+import { people } from "~/modules/permissions/person.server";
+import type { Route } from "./+types/admin.users";
 
 const adminUserActionSchema = z.discriminatedUnion("intent", [
   z.object({

@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { existsSync } from "node:fs";
 import * as schema from "~/db/schema";
 import { users } from "~/db/schema";
 import type {
@@ -77,7 +77,7 @@ export type Notification = {
   };
 }[NotificationKind];
 
-export interface Notifications {
+export type Notifications = {
   /**
    * Sends one Notification. The idempotency key makes a retry with the same
    * key a no-op, e.g. `discussion-reply:<commentId>`.
@@ -112,7 +112,7 @@ export interface Notifications {
    * Notifications that only mention it (a reply's `questionId`) stay.
    */
   archiveForComment(commentId: number): Promise<void>;
-}
+};
 
 /**
  * Runs Notifications work that must never break what called it. A failure is
@@ -228,15 +228,15 @@ async function chooseNotifications(): Promise<Notifications> {
         await import("./notifications.knock.server");
       return knockNotifications({
         secretKey,
-        publicKey: requireEnv("KNOCK_PUBLIC_API_KEY"),
-        signingKey: requireEnv("KNOCK_SIGNING_KEY"),
-        feedChannelId: requireEnv("KNOCK_FEED_CHANNEL_ID"),
+        publicKey: requireEnvironment("KNOCK_PUBLIC_API_KEY"),
+        signingKey: requireEnvironment("KNOCK_SIGNING_KEY"),
+        feedChannelId: requireEnvironment("KNOCK_FEED_CHANNEL_ID"),
       });
     }
   );
 }
 
-function requireEnv(name: string): string {
+function requireEnvironment(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(`${name} must be set when KNOCK_SECRET_API_KEY is set`);

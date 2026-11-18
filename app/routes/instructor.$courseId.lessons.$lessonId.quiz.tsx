@@ -1,31 +1,10 @@
-import { useState } from "react";
-import { Link, useFetcher, useNavigate } from "react-router";
-import { toast } from "sonner";
-import type { Route } from "./+types/instructor.$courseId.lessons.$lessonId.quiz";
-import { coursePermissions } from "~/modules/permissions/course-permissions.server";
 import {
-  QuestionType,
-  modules,
-  lessons,
-  quizzes,
-  quizQuestions,
-  quizOptions,
-  quizAttempts,
-  quizAnswers,
-} from "~/db/schema";
-import { db } from "~/db";
+  DragDropContext,
+  Droppable,
+  Draggable,
+  type DropResult,
+} from "@hello-pangea/dnd";
 import { eq, sql } from "drizzle-orm";
-import { Card, CardContent, CardHeader } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 import {
   ArrowLeft,
   ArrowRight,
@@ -39,15 +18,36 @@ import {
   XCircle,
   AlertTriangle,
 } from "lucide-react";
-import {
-  DragDropContext,
-  Droppable,
-  Draggable,
-  type DropResult,
-} from "@hello-pangea/dnd";
+import { useState } from "react";
+import { Link, useFetcher, useNavigate } from "react-router";
 import { data, isRouteErrorResponse } from "react-router";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import { toast } from "sonner";
 import { z } from "zod";
+import { db } from "~/db";
+import {
+  QuestionType,
+  modules,
+  lessons,
+  quizzes,
+  quizQuestions,
+  quizOptions,
+  quizAttempts,
+  quizAnswers,
+} from "~/db/schema";
 import { parseFormData } from "~/lib/validation";
+import { coursePermissions } from "~/modules/permissions/course-permissions.server";
+import type { Route } from "./+types/instructor.$courseId.lessons.$lessonId.quiz";
 
 const wizardDataSchema = z.object({
   title: z.string().trim().min(1, "Quiz title is required."),
@@ -82,24 +82,24 @@ const quizActionSchema = z.discriminatedUnion("intent", [
 
 // ─── Types for wizard state ───
 
-interface WizardOption {
+type WizardOption = {
   id: string;
   text: string;
   isCorrect: boolean;
-}
+};
 
-interface WizardQuestion {
+type WizardQuestion = {
   id: string;
   text: string;
   type: QuestionType;
   options: WizardOption[];
-}
+};
 
-interface WizardState {
+type WizardState = {
   title: string;
   passingScore: number;
   questions: WizardQuestion[];
-}
+};
 
 function generateId() {
   return Math.random().toString(36).slice(2, 10);
@@ -269,8 +269,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   );
   // requireCapability has checked this is a lesson in the course.
   const lesson = getLessonById(Number(params.lessonId));
-  const mod = lesson && getModuleById(lesson.moduleId);
-  if (!lesson || !mod) {
+  const courseModule = lesson && getModuleById(lesson.moduleId);
+  if (!lesson || !courseModule) {
     throw data("Lesson not found.", { status: 404 });
   }
   const lessonId = lesson.id;
@@ -281,7 +281,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     ? getQuizWithQuestions(existingQuizBasic.id)
     : null;
 
-  return { course, lesson, module: mod, existingQuiz };
+  return { course, lesson, module: courseModule, existingQuiz };
 }
 
 // ─── Action ───
@@ -406,7 +406,7 @@ function StepIndicator({
 export default function QuizBuilderWizard({
   loaderData,
 }: Route.ComponentProps) {
-  const { course, lesson, module: mod, existingQuiz } = loaderData;
+  const { course, lesson, module: courseModule, existingQuiz } = loaderData;
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -469,7 +469,10 @@ export default function QuizBuilderWizard({
               id="quizTitle"
               value={wizard.title}
               onChange={(e) =>
-                setWizard((prev) => ({ ...prev, title: e.target.value }))
+                setWizard((previous) => ({
+                  ...previous,
+                  title: e.target.value,
+                }))
               }
               placeholder="e.g. Module 1 Quiz"
             />
@@ -483,8 +486,8 @@ export default function QuizBuilderWizard({
               max={100}
               value={wizard.passingScore}
               onChange={(e) =>
-                setWizard((prev) => ({
-                  ...prev,
+                setWizard((previous) => ({
+                  ...previous,
                   passingScore: parseInt(e.target.value, 10) || 0,
                 }))
               }
@@ -498,10 +501,10 @@ export default function QuizBuilderWizard({
 
   // ─── Step 2: Questions ───
   function addQuestion() {
-    setWizard((prev) => ({
-      ...prev,
+    setWizard((previous) => ({
+      ...previous,
       questions: [
-        ...prev.questions,
+        ...previous.questions,
         {
           id: generateId(),
           text: "",
@@ -516,9 +519,9 @@ export default function QuizBuilderWizard({
   }
 
   function removeQuestion(questionId: string) {
-    setWizard((prev) => ({
-      ...prev,
-      questions: prev.questions.filter((q) => q.id !== questionId),
+    setWizard((previous) => ({
+      ...previous,
+      questions: previous.questions.filter((q) => q.id !== questionId),
     }));
   }
 
@@ -526,9 +529,9 @@ export default function QuizBuilderWizard({
     questionId: string,
     updates: Partial<WizardQuestion>
   ) {
-    setWizard((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q) => {
+    setWizard((previous) => ({
+      ...previous,
+      questions: previous.questions.map((q) => {
         if (q.id !== questionId) return q;
         const updated = { ...q, ...updates };
         // When switching to TrueFalse, reset options to True/False
@@ -562,11 +565,11 @@ export default function QuizBuilderWizard({
     const toIndex = result.destination.index;
     if (fromIndex === toIndex) return;
 
-    setWizard((prev) => {
-      const reordered = [...prev.questions];
+    setWizard((previous) => {
+      const reordered = [...previous.questions];
       const [moved] = reordered.splice(fromIndex, 1);
       reordered.splice(toIndex, 0, moved);
-      return { ...prev, questions: reordered };
+      return { ...previous, questions: reordered };
     });
   }
 
@@ -597,8 +600,8 @@ export default function QuizBuilderWizard({
                     {...provided.droppableProps}
                     className="space-y-4"
                   >
-                    {wizard.questions.map((q, idx) => (
-                      <Draggable key={q.id} draggableId={q.id} index={idx}>
+                    {wizard.questions.map((q, index) => (
+                      <Draggable key={q.id} draggableId={q.id} index={index}>
                         {(dragProvided, snapshot) => (
                           <div
                             ref={dragProvided.innerRef}
@@ -616,7 +619,7 @@ export default function QuizBuilderWizard({
                               <GripVertical className="size-4" />
                             </div>
                             <span className="mt-2 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                              {idx + 1}
+                              {index + 1}
                             </span>
                             <div className="flex-1 space-y-3">
                               <Input
@@ -634,9 +637,9 @@ export default function QuizBuilderWizard({
                                 </Label>
                                 <Select
                                   value={q.type}
-                                  onValueChange={(val) =>
+                                  onValueChange={(value) =>
                                     updateQuestion(q.id, {
-                                      type: val as QuestionType,
+                                      type: value as QuestionType,
                                     })
                                   }
                                 >
@@ -686,9 +689,9 @@ export default function QuizBuilderWizard({
 
   // ─── Step 3: Answers ───
   function addOption(questionId: string) {
-    setWizard((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q) =>
+    setWizard((previous) => ({
+      ...previous,
+      questions: previous.questions.map((q) =>
         q.id === questionId
           ? {
               ...q,
@@ -703,9 +706,9 @@ export default function QuizBuilderWizard({
   }
 
   function removeOption(questionId: string, optionId: string) {
-    setWizard((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q) =>
+    setWizard((previous) => ({
+      ...previous,
+      questions: previous.questions.map((q) =>
         q.id === questionId
           ? { ...q, options: q.options.filter((o) => o.id !== optionId) }
           : q
@@ -718,9 +721,9 @@ export default function QuizBuilderWizard({
     optionId: string,
     updates: Partial<WizardOption>
   ) {
-    setWizard((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q) => {
+    setWizard((previous) => ({
+      ...previous,
+      questions: previous.questions.map((q) => {
         if (q.id !== questionId) return q;
         return {
           ...q,
@@ -734,9 +737,9 @@ export default function QuizBuilderWizard({
   }
 
   function setCorrectOption(questionId: string, optionId: string) {
-    setWizard((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q) => {
+    setWizard((previous) => ({
+      ...previous,
+      questions: previous.questions.map((q) => {
         if (q.id !== questionId) return q;
         return {
           ...q,
@@ -766,11 +769,11 @@ export default function QuizBuilderWizard({
               </p>
             )}
 
-            {wizard.questions.map((q, idx) => (
+            {wizard.questions.map((q, index) => (
               <div key={q.id} className="rounded-lg border p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                    {idx + 1}
+                    {index + 1}
                   </span>
                   <span className="font-medium">
                     {q.text || "(No question text)"}
@@ -902,11 +905,11 @@ export default function QuizBuilderWizard({
             </div>
 
             {/* Questions review */}
-            {wizard.questions.map((q, idx) => (
+            {wizard.questions.map((q, index) => (
               <div key={q.id} className="rounded-lg border p-4">
                 <div className="mb-2 flex items-center gap-2">
                   <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                    {idx + 1}
+                    {index + 1}
                   </span>
                   <span className="font-medium">
                     {q.text || "(No question text)"}
@@ -948,8 +951,8 @@ export default function QuizBuilderWizard({
                   Please fix these issues before saving:
                 </p>
                 <ul className="list-inside list-disc space-y-1 text-sm text-destructive">
-                  {validationErrors.map((err, i) => (
-                    <li key={i}>{err}</li>
+                  {validationErrors.map((error, i) => (
+                    <li key={i}>{error}</li>
                   ))}
                 </ul>
               </div>

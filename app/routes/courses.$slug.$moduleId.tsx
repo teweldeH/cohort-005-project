@@ -1,21 +1,4 @@
-import { Link } from "react-router";
-import type { Route } from "./+types/courses.$slug.$moduleId";
-import { coursePermissions } from "~/modules/permissions/course-permissions.server";
-import { db } from "~/db";
-import {
-  categories,
-  courses,
-  lessonProgress,
-  lessons,
-  modules,
-  users,
-  LessonProgressStatus,
-} from "~/db/schema";
 import { and, eq, or } from "drizzle-orm";
-import { Card, CardContent, CardHeader } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { Skeleton } from "~/components/ui/skeleton";
-import { UserAvatar } from "~/components/user-avatar";
 import {
   AlertTriangle,
   BookOpen,
@@ -26,8 +9,25 @@ import {
   PlayCircle,
   Video,
 } from "lucide-react";
+import { Link } from "react-router";
 import { data, isRouteErrorResponse } from "react-router";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
+import { Skeleton } from "~/components/ui/skeleton";
+import { UserAvatar } from "~/components/user-avatar";
+import { db } from "~/db";
+import {
+  categories,
+  courses,
+  lessonProgress,
+  lessons,
+  modules,
+  users,
+  LessonProgressStatus,
+} from "~/db/schema";
 import { formatDuration } from "~/lib/utils";
+import { coursePermissions } from "~/modules/permissions/course-permissions.server";
+import type { Route } from "./+types/courses.$slug.$moduleId";
 
 function getCourseWithDetails(id: number) {
   const course = db
@@ -79,16 +79,20 @@ function getCourseWithDetails(id: number) {
 
   return {
     ...course,
-    modules: courseModules.map((mod) => ({
-      ...mod,
-      lessons: courseLessons.filter((l) => l.moduleId === mod.id),
+    modules: courseModules.map((courseModule) => ({
+      ...courseModule,
+      lessons: courseLessons.filter((l) => l.moduleId === courseModule.id),
     })),
   };
 }
 
 function getModuleWithLessons(id: number) {
-  const mod = db.select().from(modules).where(eq(modules.id, id)).get();
-  if (!mod) return null;
+  const courseModule = db
+    .select()
+    .from(modules)
+    .where(eq(modules.id, id))
+    .get();
+  if (!courseModule) return null;
 
   const moduleLessons = db
     .select()
@@ -97,7 +101,7 @@ function getModuleWithLessons(id: number) {
     .orderBy(lessons.position)
     .all();
 
-  return { ...mod, lessons: moduleLessons };
+  return { ...courseModule, lessons: moduleLessons };
 }
 
 function getLessonProgressForCourse(userId: number, courseId: number) {
@@ -233,7 +237,7 @@ export function HydrateFallback() {
 export default function ModuleDetail({ loaderData }: Route.ComponentProps) {
   const {
     course,
-    module: mod,
+    module: courseModule,
     canView,
     canTake,
     lessonProgressMap,
@@ -255,11 +259,11 @@ export default function ModuleDetail({ loaderData }: Route.ComponentProps) {
           {course.title}
         </Link>
         <span className="mx-2">/</span>
-        <span className="text-foreground">{mod.title}</span>
+        <span className="text-foreground">{courseModule.title}</span>
       </nav>
 
       {/* Module title and stats */}
-      <h1 className="mb-2 text-3xl font-bold">{mod.title}</h1>
+      <h1 className="mb-2 text-3xl font-bold">{courseModule.title}</h1>
       <div className="mb-6 flex items-center gap-4 text-sm text-muted-foreground">
         <span className="flex items-center gap-1">
           <BookOpen className="size-4" />
@@ -313,13 +317,13 @@ export default function ModuleDetail({ loaderData }: Route.ComponentProps) {
 
       {/* Lesson list */}
       <h2 className="mb-4 text-xl font-semibold">Lessons</h2>
-      {mod.lessons.length === 0 ? (
+      {courseModule.lessons.length === 0 ? (
         <p className="text-muted-foreground">
           No lessons have been added to this module yet.
         </p>
       ) : (
         <div className="space-y-1">
-          {mod.lessons.map((lesson) => {
+          {courseModule.lessons.map((lesson) => {
             const status = lessonProgressMap[lesson.id];
             const isCompleted = status === LessonProgressStatus.Completed;
             const isInProgress = status === LessonProgressStatus.InProgress;

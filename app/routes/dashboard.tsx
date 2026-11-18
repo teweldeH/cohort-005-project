@@ -1,5 +1,22 @@
+import { eq, and, or, sql } from "drizzle-orm";
+import {
+  AlertTriangle,
+  BookOpen,
+  CheckCircle2,
+  GraduationCap,
+  PlayCircle,
+} from "lucide-react";
 import { Link } from "react-router";
-import type { Route } from "./+types/dashboard";
+import { data, isRouteErrorResponse } from "react-router";
+import { CourseImage } from "~/components/course-image";
+import { Button } from "~/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "~/components/ui/card";
+import { Skeleton } from "~/components/ui/skeleton";
 import { db } from "~/db";
 import {
   enrollments,
@@ -9,25 +26,8 @@ import {
   lessonProgress,
   LessonProgressStatus,
 } from "~/db/schema";
-import { eq, and, or, sql } from "drizzle-orm";
 import { people } from "~/modules/permissions/person.server";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-} from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { Skeleton } from "~/components/ui/skeleton";
-import {
-  AlertTriangle,
-  BookOpen,
-  CheckCircle2,
-  GraduationCap,
-  PlayCircle,
-} from "lucide-react";
-import { CourseImage } from "~/components/course-image";
-import { data, isRouteErrorResponse } from "react-router";
+import type { Route } from "./+types/dashboard";
 
 function getUserEnrolledCourses(userId: number) {
   return db
@@ -173,11 +173,11 @@ function getNextIncompleteLesson(userId: number, courseId: number) {
 
   if (courseModules.length === 0) return null;
 
-  for (const mod of courseModules) {
+  for (const courseModule of courseModules) {
     const moduleLessons = db
       .select()
       .from(lessons)
-      .where(eq(lessons.moduleId, mod.id))
+      .where(eq(lessons.moduleId, courseModule.id))
       .orderBy(lessons.position)
       .all();
 

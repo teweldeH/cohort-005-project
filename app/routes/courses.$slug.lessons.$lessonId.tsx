@@ -1,22 +1,3 @@
-import { useState, useEffect, useCallback } from "react";
-import { Link, useFetcher, useNavigate } from "react-router";
-import { toast } from "sonner";
-import type { Route } from "./+types/courses.$slug.lessons.$lessonId";
-import {
-  coursePermissions,
-  type Capability,
-  type CourseRef,
-  type DenialReason,
-} from "~/modules/permissions/course-permissions.server";
-import { renderComment } from "~/lib/comment-markdown.server";
-import { markdown, type Markdown } from "~/lib/text";
-import {
-  createComment,
-  deleteComment,
-  editComment,
-} from "~/lib/comments.server";
-import { defaultNotifications } from "~/lib/notifications.server";
-import { isBookmarked, toggleBookmark } from "~/lib/bookmarks.server";
 import { getNote, saveNote } from "~/lib/notes.server";
 import { MAX_NOTE_LENGTH } from "~/lib/notes";
 import {
@@ -65,13 +46,32 @@ import {
   Trophy,
   RotateCcw,
 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useFetcher, useNavigate } from "react-router";
 import { cn, formatDuration, formatRelativeTime } from "~/lib/utils";
-import { renderMarkdown } from "~/lib/markdown.server";
-import { YouTubePlayer } from "~/components/youtube-player";
 import { data, isRouteErrorResponse } from "react-router";
+import { toast } from "sonner";
 import { z } from "zod";
+import { YouTubePlayer } from "~/components/youtube-player";
+import { isBookmarked, toggleBookmark } from "~/lib/bookmarks.server";
+import { renderComment } from "~/lib/comment-markdown.server";
+import {
+  createComment,
+  deleteComment,
+  editComment,
+} from "~/lib/comments.server";
+import { renderMarkdown } from "~/lib/markdown.server";
+import { defaultNotifications } from "~/lib/notifications.server";
 import { countryName } from "~/lib/ppp";
+import { markdown, type Markdown } from "~/lib/text";
 import { parseFormData } from "~/lib/validation";
+import {
+  coursePermissions,
+  type Capability,
+  type CourseRef,
+  type DenialReason,
+} from "~/modules/permissions/course-permissions.server";
+import type { Route } from "./+types/courses.$slug.lessons.$lessonId";
 
 const markCompleteSchema = z.object({
   intent: z.literal("mark-complete"),
@@ -173,9 +173,9 @@ function getCourseWithDetails(id: number) {
 
   return {
     ...course,
-    modules: courseModules.map((mod) => ({
-      ...mod,
-      lessons: courseLessons.filter((l) => l.moduleId === mod.id),
+    modules: courseModules.map((courseModule) => ({
+      ...courseModule,
+      lessons: courseLessons.filter((l) => l.moduleId === courseModule.id),
     })),
   };
 }
@@ -498,7 +498,7 @@ function computeResult(userId: any, quizId: any, selectedAnswers: any): any {
       .all();
 
     let correct = 0;
-    let total = questions.length;
+    const total = questions.length;
     const questionResults: any[] = [];
 
     for (let i = 0; i < questions.length; i++) {
@@ -517,12 +517,12 @@ function computeResult(userId: any, quizId: any, selectedAnswers: any): any {
 
       let correctOptionId = null;
       if (q.questionType === "multiple_choice") {
-        const opts = db
+        const options = db
           .select()
           .from(quizOptions)
           .where(eq(quizOptions.questionId, q.id))
           .all();
-        const correctOpt = opts.find((o) => o.isCorrect === true);
+        const correctOpt = options.find((o) => o.isCorrect === true);
         correctOptionId = correctOpt ? correctOpt.id : null;
       } else if (q.questionType === "true_false") {
         const correctOpt = db
@@ -629,13 +629,13 @@ function flattenCourseLessons(course: {
   }>;
 }): FlatLesson[] {
   const flat: FlatLesson[] = [];
-  for (const mod of course.modules) {
-    for (const lesson of mod.lessons) {
+  for (const courseModule of course.modules) {
+    for (const lesson of courseModule.lessons) {
       flat.push({
         id: lesson.id,
         title: lesson.title,
-        moduleId: mod.id,
-        moduleTitle: mod.title,
+        moduleId: courseModule.id,
+        moduleTitle: courseModule.title,
       });
     }
   }
@@ -659,8 +659,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const courseWithDetails = getCourseWithDetails(course.id);
   const lesson = getLessonById(lessonId);
-  const mod = lesson ? getModuleById(lesson.moduleId) : undefined;
-  if (!courseWithDetails || !lesson || !mod) {
+  const courseModule = lesson ? getModuleById(lesson.moduleId) : undefined;
+  if (!courseWithDetails || !lesson || !courseModule) {
     throw data("Lesson not found", { status: 404 });
   }
 
@@ -687,7 +687,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
         slug: courseWithDetails.slug,
       },
       curriculum,
-      module: { id: mod.id, title: mod.title },
+      module: { id: courseModule.id, title: courseModule.title },
       lesson: { id: lesson.id, title: lesson.title },
       enrolled,
       lockedReason,
@@ -697,7 +697,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   let lessonStatus: string | null = null;
   let lastWatchPosition = 0;
   let watchProgress = 0;
-  let lessonProgressMap: Record<number, string> = {};
+  const lessonProgressMap: Record<number, string> = {};
 
   if (currentUserId) {
     // Progress is recorded only for people who can take the course, so a
@@ -750,7 +750,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Build prev/next navigation
   const allLessons = flattenCourseLessons(courseWithDetails);
   const currentIndex = allLessons.findIndex((l) => l.id === lessonId);
-  const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
+  const previousLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
   const nextLesson =
     currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
 
@@ -808,15 +808,15 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     },
     curriculum,
     module: {
-      id: mod.id,
-      title: mod.title,
+      id: courseModule.id,
+      title: courseModule.title,
     },
     lesson,
     contentHtml,
     lessonStatus,
     enrolled,
     currentUserId,
-    prevLesson,
+    prevLesson: previousLesson,
     nextLesson,
     quiz,
     bestAttempt,
@@ -1010,8 +1010,8 @@ function useAutoplay() {
   }, []);
 
   const toggle = useCallback(() => {
-    setEnabled((prev) => {
-      const next = !prev;
+    setEnabled((previous) => {
+      const next = !previous;
       try {
         localStorage.setItem(AUTOPLAY_KEY, String(next));
       } catch {
@@ -1034,7 +1034,14 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
 }
 
 function LockedLesson({
-  data: { course, curriculum, module: mod, lesson, enrolled, lockedReason },
+  data: {
+    course,
+    curriculum,
+    module: courseModule,
+    lesson,
+    enrolled,
+    lockedReason,
+  },
 }: {
   data: Extract<LessonLoaderData, { view: "locked" }>;
 }) {
@@ -1053,7 +1060,7 @@ function LockedLesson({
       <div className="flex-1 p-6 lg:p-8">
         <LessonBreadcrumb
           course={course}
-          mod={mod}
+          mod={courseModule}
           lessonTitle={lesson.title}
         />
 
@@ -1152,7 +1159,7 @@ function FullLesson({
   const {
     course,
     curriculum,
-    module: mod,
+    module: courseModule,
     lesson,
     contentHtml,
     lessonStatus,
@@ -1209,7 +1216,7 @@ function FullLesson({
       <div className="flex-1 p-6 lg:p-8">
         <LessonBreadcrumb
           course={course}
-          mod={mod}
+          mod={courseModule}
           lessonTitle={lesson.title}
         />
 
@@ -1488,8 +1495,8 @@ function CurriculumSidebar({
   });
 
   function toggleModule(moduleId: number) {
-    setExpandedModules((prev) => {
-      const next = new Set(prev);
+    setExpandedModules((previous) => {
+      const next = new Set(previous);
       if (next.has(moduleId)) {
         next.delete(moduleId);
       } else {
@@ -1512,13 +1519,13 @@ function CurriculumSidebar({
         </div>
 
         <nav className="flex-1 p-2">
-          {curriculum.map((mod) => {
-            const isExpanded = expandedModules.has(mod.id);
+          {curriculum.map((courseModule) => {
+            const isExpanded = expandedModules.has(courseModule.id);
 
             return (
-              <div key={mod.id} className="mb-1">
+              <div key={courseModule.id} className="mb-1">
                 <button
-                  onClick={() => toggleModule(mod.id)}
+                  onClick={() => toggleModule(courseModule.id)}
                   className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground/80 hover:bg-muted"
                 >
                   <ChevronDown
@@ -1527,12 +1534,12 @@ function CurriculumSidebar({
                       !isExpanded && "-rotate-90"
                     )}
                   />
-                  <span className="flex-1 text-left">{mod.title}</span>
+                  <span className="flex-1 text-left">{courseModule.title}</span>
                 </button>
 
                 {isExpanded && (
                   <ul className="ml-4 space-y-0.5 py-1">
-                    {mod.lessons.map((l) => {
+                    {courseModule.lessons.map((l) => {
                       const isCurrent = l.id === currentLessonId;
                       const status = lessonProgressMap[l.id];
                       const isCompleted =
@@ -1796,8 +1803,8 @@ function QuizSection({
                         value={option.id}
                         checked={selectedAnswers[question.id] === option.id}
                         onChange={() =>
-                          setSelectedAnswers((prev) => ({
-                            ...prev,
+                          setSelectedAnswers((previous) => ({
+                            ...previous,
                             [question.id]: option.id,
                           }))
                         }

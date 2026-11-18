@@ -1,31 +1,10 @@
-import { useState, useRef, useEffect } from "react";
-import { Link, useFetcher } from "react-router";
-import { toast } from "sonner";
 import {
   DragDropContext,
   Droppable,
   Draggable,
   type DropResult,
 } from "@hello-pangea/dnd";
-import type { Route } from "./+types/instructor.$courseId";
-import { coursePermissions } from "~/modules/permissions/course-permissions.server";
-import { markdown } from "~/lib/text";
-import { CourseStatus } from "~/db/schema";
-import { db } from "~/db";
-import {
-  courses,
-  categories,
-  users,
-  modules,
-  lessons,
-  enrollments,
-  lessonProgress,
-  LessonProgressStatus,
-  quizzes,
-  quizAttempts,
-} from "~/db/schema";
 import { eq, and, or, sql, desc, gt, gte } from "drizzle-orm";
-import { formatDuration, formatPrice } from "~/lib/utils";
 import { MonacoMarkdownEditor } from "~/components/monaco-markdown-editor";
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -56,9 +35,30 @@ import {
   Globe,
   FileText,
 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Link, useFetcher } from "react-router";
 import { data, isRouteErrorResponse } from "react-router";
+import { toast } from "sonner";
 import { z } from "zod";
+import { db } from "~/db";
+import {
+  courses,
+  categories,
+  users,
+  modules,
+  lessons,
+  enrollments,
+  lessonProgress,
+  LessonProgressStatus,
+  quizzes,
+  quizAttempts,
+} from "~/db/schema";
+import { CourseStatus } from "~/db/schema";
+import { markdown } from "~/lib/text";
+import { formatDuration, formatPrice } from "~/lib/utils";
 import { parseFormData } from "~/lib/validation";
+import { coursePermissions } from "~/modules/permissions/course-permissions.server";
+import type { Route } from "./+types/instructor.$courseId";
 
 function getUserById(id: number) {
   return db.select().from(users).where(eq(users.id, id)).get();
@@ -114,9 +114,9 @@ function getCourseWithDetails(id: number) {
 
   return {
     ...course,
-    modules: courseModules.map((mod) => ({
-      ...mod,
-      lessons: courseLessons.filter((l) => l.moduleId === mod.id),
+    modules: courseModules.map((courseModule) => ({
+      ...courseModule,
+      lessons: courseLessons.filter((l) => l.moduleId === courseModule.id),
     })),
   };
 }
@@ -565,7 +565,9 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const enrolledStudents = getCourseEnrolledStudents(courseId);
 
   // Gather all lessons from the course modules and find which have quizzes
-  const allCourseLessons = course.modules.flatMap((mod) => mod.lessons);
+  const allCourseLessons = course.modules.flatMap(
+    (courseModule) => courseModule.lessons
+  );
   const lessonQuizzes: {
     lessonId: number;
     lessonTitle: string;
@@ -679,8 +681,8 @@ export async function action({ params, request }: Route.ActionArgs) {
 
   if (intent === "rename-module") {
     const { moduleId, title } = parsed.data;
-    const mod = getModuleById(moduleId);
-    if (!mod || mod.courseId !== courseId) {
+    const courseModule = getModuleById(moduleId);
+    if (!courseModule || courseModule.courseId !== courseId) {
       return data(
         { error: "Module not found in this course." },
         { status: 404 }
@@ -692,8 +694,8 @@ export async function action({ params, request }: Route.ActionArgs) {
 
   if (intent === "delete-module") {
     const { moduleId } = parsed.data;
-    const mod = getModuleById(moduleId);
-    if (!mod || mod.courseId !== courseId) {
+    const courseModule = getModuleById(moduleId);
+    if (!courseModule || courseModule.courseId !== courseId) {
       return data(
         { error: "Module not found in this course." },
         { status: 404 }
@@ -705,8 +707,8 @@ export async function action({ params, request }: Route.ActionArgs) {
 
   if (intent === "add-lesson") {
     const { moduleId, title } = parsed.data;
-    const mod = getModuleById(moduleId);
-    if (!mod || mod.courseId !== courseId) {
+    const courseModule = getModuleById(moduleId);
+    if (!courseModule || courseModule.courseId !== courseId) {
       return data(
         { error: "Module not found in this course." },
         { status: 404 }
@@ -722,8 +724,8 @@ export async function action({ params, request }: Route.ActionArgs) {
     if (!lesson) {
       return data({ error: "Lesson not found." }, { status: 404 });
     }
-    const mod = getModuleById(lesson.moduleId);
-    if (!mod || mod.courseId !== courseId) {
+    const courseModule = getModuleById(lesson.moduleId);
+    if (!courseModule || courseModule.courseId !== courseId) {
       return data(
         { error: "Lesson not found in this course." },
         { status: 404 }
@@ -741,8 +743,8 @@ export async function action({ params, request }: Route.ActionArgs) {
 
   if (intent === "reorder-lessons") {
     const { moduleId, lessonIds: lessonIdsJson } = parsed.data;
-    const mod = getModuleById(moduleId);
-    if (!mod || mod.courseId !== courseId) {
+    const courseModule = getModuleById(moduleId);
+    if (!courseModule || courseModule.courseId !== courseId) {
       return data(
         { error: "Module not found in this course." },
         { status: 404 }
@@ -759,15 +761,15 @@ export async function action({ params, request }: Route.ActionArgs) {
     if (!lesson) {
       return data({ error: "Lesson not found." }, { status: 404 });
     }
-    const sourceMod = getModuleById(lesson.moduleId);
-    if (!sourceMod || sourceMod.courseId !== courseId) {
+    const sourceCourseModule = getModuleById(lesson.moduleId);
+    if (!sourceCourseModule || sourceCourseModule.courseId !== courseId) {
       return data(
         { error: "Lesson not found in this course." },
         { status: 404 }
       );
     }
-    const targetMod = getModuleById(targetModuleId);
-    if (!targetMod || targetMod.courseId !== courseId) {
+    const targetCourseModule = getModuleById(targetModuleId);
+    if (!targetCourseModule || targetCourseModule.courseId !== courseId) {
       return data(
         { error: "Target module not found in this course." },
         { status: 404 }
@@ -783,8 +785,8 @@ export async function action({ params, request }: Route.ActionArgs) {
     if (!lesson) {
       return data({ error: "Lesson not found." }, { status: 404 });
     }
-    const mod = getModuleById(lesson.moduleId);
-    if (!mod || mod.courseId !== courseId) {
+    const courseModule = getModuleById(lesson.moduleId);
+    if (!courseModule || courseModule.courseId !== courseId) {
       return data(
         { error: "Lesson not found in this course." },
         { status: 404 }
@@ -1556,17 +1558,19 @@ export default function InstructorCourseEditor({
         result.source.droppableId.replace("lessons-", ""),
         10
       );
-      const destModuleId = parseInt(
+      const destinationModuleId = parseInt(
         result.destination.droppableId.replace("lessons-", ""),
         10
       );
 
-      if (sourceModuleId === destModuleId) {
+      if (sourceModuleId === destinationModuleId) {
         // Reorder within the same module
-        const mod = course.modules.find((m) => m.id === sourceModuleId);
-        if (!mod) return;
+        const courseModule = course.modules.find(
+          (m) => m.id === sourceModuleId
+        );
+        if (!courseModule) return;
 
-        const reordered = Array.from(mod.lessons);
+        const reordered = Array.from(courseModule.lessons);
         const [moved] = reordered.splice(result.source.index, 1);
         reordered.splice(result.destination.index, 0, moved);
 
@@ -1581,10 +1585,12 @@ export default function InstructorCourseEditor({
         );
       } else {
         // Move lesson to a different module
-        const sourceMod = course.modules.find((m) => m.id === sourceModuleId);
-        if (!sourceMod) return;
+        const sourceCourseModule = course.modules.find(
+          (m) => m.id === sourceModuleId
+        );
+        if (!sourceCourseModule) return;
 
-        const lesson = sourceMod.lessons[result.source.index];
+        const lesson = sourceCourseModule.lessons[result.source.index];
         if (!lesson) return;
 
         // Target position is 1-based (destination index + 1)
@@ -1594,7 +1600,7 @@ export default function InstructorCourseEditor({
           {
             intent: "move-lesson",
             lessonId: String(lesson.id),
-            targetModuleId: String(destModuleId),
+            targetModuleId: String(destinationModuleId),
             targetPosition: String(targetPosition),
           },
           { method: "post" }
@@ -1690,10 +1696,10 @@ export default function InstructorCourseEditor({
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                   >
-                    {course.modules.map((mod, index) => (
+                    {course.modules.map((courseModule, index) => (
                       <Draggable
-                        key={mod.id}
-                        draggableId={String(mod.id)}
+                        key={courseModule.id}
+                        draggableId={String(courseModule.id)}
                         index={index}
                       >
                         {(provided, snapshot) => (
@@ -1719,31 +1725,31 @@ export default function InstructorCourseEditor({
                                     </div>
                                     <div className="flex-1">
                                       <InlineEditableModuleTitle
-                                        value={mod.title}
-                                        moduleId={mod.id}
+                                        value={courseModule.title}
+                                        moduleId={courseModule.id}
                                       />
                                       <p className="mt-1 px-2 text-sm text-muted-foreground">
-                                        {mod.lessons.length}{" "}
-                                        {mod.lessons.length === 1
+                                        {courseModule.lessons.length}{" "}
+                                        {courseModule.lessons.length === 1
                                           ? "lesson"
                                           : "lessons"}
                                       </p>
                                     </div>
                                   </div>
                                   <DeleteModuleButton
-                                    moduleId={mod.id}
-                                    moduleTitle={mod.title}
+                                    moduleId={courseModule.id}
+                                    moduleTitle={courseModule.title}
                                   />
                                 </div>
                               </CardHeader>
                               <CardContent>
-                                {mod.lessons.length === 0 ? (
+                                {courseModule.lessons.length === 0 ? (
                                   <p className="px-3 py-2 text-sm text-muted-foreground">
                                     No lessons yet.
                                   </p>
                                 ) : (
                                   <Droppable
-                                    droppableId={`lessons-${mod.id}`}
+                                    droppableId={`lessons-${courseModule.id}`}
                                     type="lesson"
                                   >
                                     {(lessonDropProvided) => (
@@ -1752,7 +1758,7 @@ export default function InstructorCourseEditor({
                                         ref={lessonDropProvided.innerRef}
                                         {...lessonDropProvided.droppableProps}
                                       >
-                                        {mod.lessons.map(
+                                        {courseModule.lessons.map(
                                           (lesson, lessonIndex) => (
                                             <Draggable
                                               key={lesson.id}
@@ -1836,7 +1842,7 @@ export default function InstructorCourseEditor({
                                     )}
                                   </Droppable>
                                 )}
-                                <AddLessonForm moduleId={mod.id} />
+                                <AddLessonForm moduleId={courseModule.id} />
                               </CardContent>
                             </Card>
                           </div>
@@ -1901,11 +1907,11 @@ export default function InstructorCourseEditor({
                         defaultValue={(course.price / 100).toFixed(2)}
                         className="w-28"
                         onBlur={(e) => {
-                          const val = parseFloat(e.target.value);
+                          const value = parseFloat(e.target.value);
                           if (
-                            !isNaN(val) &&
-                            val >= 0 &&
-                            Math.round(val * 100) !== course.price
+                            !isNaN(value) &&
+                            value >= 0 &&
+                            Math.round(value * 100) !== course.price
                           ) {
                             priceFetcher.submit(
                               { intent: "update-price", price: e.target.value },

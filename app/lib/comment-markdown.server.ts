@@ -103,8 +103,8 @@ export async function renderComment(markdown: Markdown): Promise<string> {
 
     if (!url) return text;
 
-    const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
-    return `<a href="${escapeHtml(url)}"${titleAttr} rel="nofollow noopener noreferrer" target="_blank">${text}</a>`;
+    const titleAttribute = title ? ` title="${escapeHtml(title)}"` : "";
+    return `<a href="${escapeHtml(url)}"${titleAttribute} rel="nofollow noopener noreferrer" target="_blank">${text}</a>`;
   };
 
   // No images in comments — avoids tracking pixels and layout-breaking uploads.
