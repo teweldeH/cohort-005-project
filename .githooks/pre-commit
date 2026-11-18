@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Refuse the commit unless the staged files pass the checks CI would run.
+# See AGENTS.md.
+set -e
+
+# Every staged file must fit in an agent's context in one read.
+npx tsx scripts/check-staged-file-size.ts
+
+# Migrations are forward-only: add a new one instead of editing a shipped one.
+if ! git diff --cached --diff-filter=MD --quiet -- 'drizzle/*.sql'; then
+  echo "Commit refused: it edits or deletes an existing migration in drizzle/." >&2
+  echo "Restore it and run \`npm run db:generate\` to add a new migration." >&2
+  exit 1
+fi
+
+npm run check
