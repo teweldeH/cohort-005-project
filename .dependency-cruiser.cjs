@@ -94,6 +94,17 @@ module.exports = {
       from: { path: "^app/routes/instructor\\.analytics\\.tsx$" },
       to: { path: ["^app/db/", "^node_modules/(drizzle-orm|better-sqlite3)/"] },
     },
+    {
+      name: "components-no-db",
+      comment:
+        "Components ship to the browser, and the database driver cannot run there, directly or through another module. Load data in a route loader and pass it in as props. The schema itself is browser-safe.",
+      severity: "error",
+      from: { path: "^app/components/" },
+      to: {
+        path: ["^app/db/index\\.ts$", "^node_modules/better-sqlite3/"],
+        reachable: true,
+      },
+    },
   ],
   options: {
     doNotFollow: { path: "node_modules" },
