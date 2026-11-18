@@ -1,4 +1,3 @@
-// Custom oxlint rules, loaded through `jsPlugins` in .oxlintrc.json.
 import type { RuleTester } from "oxlint/plugins-dev";
 
 type Rule = Parameters<RuleTester["run"]>[1];
@@ -30,7 +29,7 @@ const noDynamicSqlRaw: Rule = {
   meta: {
     type: "problem",
     messages: {
-      dynamic:
+      dynamicArgument:
         "sql.raw takes a static string only. Pass values through the sql`` tag or Drizzle operators (like, eq) so they are bound.",
     },
   },
@@ -38,7 +37,7 @@ const noDynamicSqlRaw: Rule = {
     CallExpression(node) {
       if (!isSqlRaw(node.callee)) return;
       if (isStatic(node.arguments[0])) return;
-      context.report({ node, messageId: "dynamic" });
+      context.report({ node, messageId: "dynamicArgument" });
     },
   }),
 };

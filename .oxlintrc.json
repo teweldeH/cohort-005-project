@@ -87,7 +87,6 @@
     "vitest/no-disabled-tests": "error",
     "vitest/no-focused-tests": "error",
 
-    // Custom rules from lint/oxlint-plugin.ts.
     "cadence/no-dynamic-sql-raw": "error"
   },
   "overrides": [

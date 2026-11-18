@@ -9,7 +9,7 @@ const ruleTester = new RuleTester({
   languageOptions: { sourceType: "module" },
 });
 
-const error = { messageId: "dynamic" };
+const dynamicArgument = { messageId: "dynamicArgument" };
 
 ruleTester.run("no-dynamic-sql-raw", plugin.rules["no-dynamic-sql-raw"], {
   valid: [
@@ -20,10 +20,13 @@ ruleTester.run("no-dynamic-sql-raw", plugin.rules["no-dynamic-sql-raw"], {
     `other.raw(term)`,
   ],
   invalid: [
-    { code: "sql.raw(`title LIKE '%${search}%'`)", errors: [error] },
-    { code: `sql.raw("title LIKE '" + search + "'")`, errors: [error] },
-    { code: `sql.raw(search)`, errors: [error] },
-    { code: `sql.raw(column.trim())`, errors: [error] },
-    { code: `sql.raw()`, errors: [error] },
+    { code: "sql.raw(`title LIKE '%${search}%'`)", errors: [dynamicArgument] },
+    {
+      code: `sql.raw("title LIKE '" + search + "'")`,
+      errors: [dynamicArgument],
+    },
+    { code: `sql.raw(search)`, errors: [dynamicArgument] },
+    { code: `sql.raw(column.trim())`, errors: [dynamicArgument] },
+    { code: `sql.raw()`, errors: [dynamicArgument] },
   ],
 });
