@@ -26,11 +26,34 @@ describe("renderComment", () => {
       expect(html).toContain("const");
     });
 
-    it("falls back to a plain block for unknown languages", async () => {
+    it.each([
+      ["typescript", "const a: number = 1;"],
+      ["javascript", "const a = 1;"],
+      ["json", '{"a": 1}'],
+      ["bash", 'echo "hi"'],
+      ["html", "<b>hi</b>"],
+      ["css", "a { color: red; }"],
+      ["tsx", "const a = <div />;"],
+      ["jsx", "const a = <div />;"],
+      ["sql", "SELECT 1;"],
+      ["yaml", "a: 1"],
+      ["markdown", "# hi"],
+    ])("colours %s tokens", async (lang, code) => {
+      const html = await renderComment(
+        markdown("```" + lang + "\n" + code + "\n```")
+      );
+
+      // Plain text renders as one uncoloured span; a known language
+      // gives its tokens their own colours.
+      expect(html).toContain('<span style="color:');
+    });
+
+    it("renders unknown languages as uncoloured shiki text", async () => {
       const html = await renderComment(markdown("```brainfuck\n+++\n```"));
 
-      expect(html).toContain("<pre");
-      expect(html).toContain("+++");
+      expect(html).toContain('<pre class="shiki');
+      expect(html).toContain("<span>+++</span>");
+      expect(html).not.toContain('<span style="color:');
     });
 
     it("escapes markup inside code blocks", async () => {
@@ -93,6 +116,14 @@ describe("renderComment", () => {
 
       expect(html).not.toContain("<style>");
     });
+
+    it("escapes ampersands and both kinds of quote", async () => {
+      const html = await renderComment(markdown(`<span title="a & 'b'">`));
+
+      expect(html).toContain(
+        "&lt;span title=&quot;a &amp; &#39;b&#39;&quot;&gt;"
+      );
+    });
   });
 
   describe("links", () => {
@@ -101,9 +132,37 @@ describe("renderComment", () => {
         markdown("[docs](https://example.test/a)")
       );
 
-      expect(html).toContain('href="https://example.test/a"');
-      expect(html).toContain('rel="nofollow noopener noreferrer"');
-      expect(html).toContain('target="_blank"');
+      expect(html).toContain(
+        '<a href="https://example.test/a" rel="nofollow noopener noreferrer" target="_blank">docs</a>'
+      );
+    });
+
+    it("keeps http links", async () => {
+      const html = await renderComment(
+        markdown("[docs](http://example.test/a)")
+      );
+
+      expect(html).toContain('href="http://example.test/a"');
+    });
+
+    it("keeps mailto links", async () => {
+      const html = await renderComment(markdown("[mail](mailto:a@b.test)"));
+
+      expect(html).toContain('href="mailto:a@b.test"');
+    });
+
+    it("trims whitespace around a relative link", async () => {
+      const html = await renderComment(markdown("[lesson](< /courses/1>)"));
+
+      expect(html).toContain('href="/courses/1"');
+    });
+
+    it("keeps relative links", async () => {
+      const html = await renderComment(
+        markdown("[lesson](/courses/x/lessons/1)")
+      );
+
+      expect(html).toContain('href="/courses/x/lessons/1"');
     });
 
     it("downgrades a javascript: link to plain text", async () => {
@@ -136,6 +195,14 @@ describe("renderComment", () => {
       );
 
       expect(html).not.toContain('onmouseover="alert(1)"');
+    });
+
+    it("keeps a link title, escaped", async () => {
+      const html = await renderComment(
+        markdown(`[x](https://example.test 'say "hi" & bye')`)
+      );
+
+      expect(html).toContain('title="say &quot;hi&quot; &amp; bye"');
     });
 
     it("keeps autolinks", async () => {
