@@ -24,7 +24,9 @@ Read CODING_STANDARDS.md.
   request.
 - Leave `.github/` untouched.
 - When the change shows in the UI, save a before and an after screenshot as
-  PNGs in /tmp/evidence/.
+  PNGs in /tmp/evidence/. The dev server is already running on
+  http://localhost:5173 (log: /tmp/dev.log) and `agent-browser` is on PATH:
+  see docs/agents/agent-browser.md for the commands and the seeded users.
 
 **Leave `purchases.created_at` and `courses.instructor_id` unindexed**, on
 purpose. If your ticket's report is slow, say so in your summary and leave it

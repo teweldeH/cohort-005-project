@@ -182,10 +182,21 @@ jobs:
           ' /tmp/ticket.json > /tmp/ticket.md
           cat /tmp/ticket.md
 
+      - name: Start the dev server and the browser
+        uses: ./.github/actions/dev-server
+
       - name: Build the ticket
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: npx tsx .sandcastle/agent-workflows/implement/implement.ts
+
+      - name: Stop the dev server
+        # Before any step that holds a token: the server runs code the agent
+        # edited. agent-browser's Chrome goes with it.
+        if: always()
+        run: |
+          [ -f /tmp/dev.pid ] && kill -- -"$(cat /tmp/dev.pid)" || true
+          agent-browser close >/dev/null 2>&1 || true
 
       - name: Check the agent committed
         # The agent owns the commits now, so this step owns the question of
