@@ -20,6 +20,14 @@ a type and you do not check it again. Coerce numbers through the schema, not
 `Number()`: `Number("")` is `0`, and an empty `lessonId` once opened lesson 0
 for every learner.
 
+## The client normalises input the way the action does
+
+When a form shows state derived from its input (a counter, "Unsaved
+changes", a disabled Save), it runs the input through the same parser or
+normaliser the action uses: import it from the module, never re-derive it.
+The notes card once compared the untrimmed box with the trimmed note the
+action stored, so it said "Unsaved changes" right after a save.
+
 ## Check permission in the action, not only the loader
 
 A loader guard does not protect an action. They are separate requests. For a
@@ -44,7 +52,10 @@ change to how the module stores its data leaves its tests alone.
 
 ## Keep files under 5000 tokens
 
-Keep every file under 5000 tokens.
+Keep every file under 5000 tokens. `npm run lint:tokens` and the pre-commit
+hook enforce it. A file on the grandfather list in `.oxlintrc.json` (the
+override that turns `max-lines` off) is exempt until a ticket of its own
+splits it, so splitting one inside an unrelated change is scope creep.
 
 ## Wrap related writes in a transaction
 

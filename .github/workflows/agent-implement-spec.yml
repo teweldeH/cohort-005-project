@@ -475,6 +475,9 @@ jobs:
       - name: Build the ticket
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Same as agent-implement.yml: mutation testing grades every commit
+          # the agent makes. See scripts/mutate-diff.ts.
+          MUTATION_BASE: ${{ steps.branch.outputs.base }}
         run: npx tsx .sandcastle/agent-workflows/implement-spec/build.ts
 
       - name: Check the agent committed
