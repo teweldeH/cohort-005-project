@@ -50,7 +50,7 @@ export function LessonNote({ note }: { note: LessonNoteData }) {
             {error ? (
               <span className="text-sm text-destructive">{error}</span>
             ) : (
-              <NoteStatus note={note} unsaved={!state.saved && !state.empty} />
+              <NoteStatus note={note} unsaved={state.unsaved} />
             )}
 
             <span

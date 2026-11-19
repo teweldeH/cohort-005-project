@@ -58,4 +58,34 @@ describe("describeNoteDraft", () => {
   it("does not treat an empty draft as saved when there is no note", () => {
     expect(describeNoteDraft("", null).saved).toBe(false);
   });
+
+  it("treats a draft as saved when only surrounding whitespace differs, as the server trims it", () => {
+    expect(describeNoteDraft("  same\n", "same")).toMatchObject({
+      saved: true,
+      unsaved: false,
+      canSave: false,
+    });
+  });
+
+  it("measures the limit on the trimmed text the server will store", () => {
+    const state = describeNoteDraft(` ${"a".repeat(MAX_NOTE_LENGTH)} `, null);
+    expect(state.tooLong).toBe(false);
+    expect(state.canSave).toBe(true);
+  });
+
+  it("reports an emptied box as unsaved when a note is saved", () => {
+    expect(describeNoteDraft("", "same")).toMatchObject({
+      saved: false,
+      unsaved: true,
+      canSave: false,
+    });
+  });
+
+  it("reports nothing unsaved for an empty box with no note", () => {
+    expect(describeNoteDraft("", null).unsaved).toBe(false);
+  });
+
+  it("reports an edited note as unsaved", () => {
+    expect(describeNoteDraft("same, edited", "same").unsaved).toBe(true);
+  });
 });
