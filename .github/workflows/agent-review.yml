@@ -187,6 +187,9 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OUTPUT_DIR: ${{ runner.temp }}
+          # `npm run test:mutation` grades the whole PR, not just the
+          # review's own uncommitted edits. See scripts/mutate-diff.ts.
+          MUTATION_BASE: origin/${{ github.event.pull_request.base.ref }}
         run: npx tsx .sandcastle/agent-workflows/review/review.ts
 
       - name: Push the review's fixes

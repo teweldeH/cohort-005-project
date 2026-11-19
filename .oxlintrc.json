@@ -121,6 +121,8 @@
       }
     },
     // Files already over a size limit. Remove each entry once the file is split.
+    // scripts/check-file-tokens.js reads this list too, so it is the one
+    // grandfather list for the line limit and the token limit.
     {
       "files": [
         "app/lib/comments.server.test.ts",
@@ -138,6 +140,8 @@
         "app/routes/instructor.analytics.tsx",
         "request-logger/agents.test.ts",
         "request-logger/agents.ts",
+        "request-logger/proxy.ts",
+        "request-logger/README.md",
         "request-logger/render.ts",
         "scripts/seed.ts"
       ],

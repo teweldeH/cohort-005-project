@@ -185,6 +185,9 @@ jobs:
       - name: Build the ticket
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # `npm run test:mutation` grades every commit the agent makes, not
+          # just its uncommitted edits. See scripts/mutate-diff.ts.
+          MUTATION_BASE: ${{ steps.branch.outputs.base }}
         run: npx tsx .sandcastle/agent-workflows/implement/implement.ts
 
       - name: Check the agent committed
