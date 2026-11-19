@@ -25,9 +25,11 @@
     "loc": "git ls-files | grep -vE '(lock|.db|_snapshot.json)' | xargs wc -l",
     "lint:oxlint": "oxlint -c .oxlintrc.json",
     "lint:boundaries": "depcruise app --cache node_modules/.cache/dependency-cruiser",
+    "lint:tokens": "git ls-files -z | xargs -0 node scripts/check-file-tokens.js",
+    "lint:modules": "node scripts/check-module-layout.js",
     "format": "biome format --write . && prettier --write \"**/*.md\"",
     "format:check": "biome format . && prettier --check \"**/*.md\"",
-    "check": "npm run format:check && npm run lint:oxlint && npm run typecheck && npm run lint:boundaries && npm run test",
+    "check": "npm run format:check && npm run lint:oxlint && npm run lint:tokens && npm run lint:modules && npm run typecheck && npm run lint:boundaries && npm run test",
     "prepare": "husky"
   },
   "dependencies": {
@@ -70,6 +72,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@types/youtube": "^0.1.2",
+    "agent-browser": "0.41.2",
     "ai-hero-cli": "0.13.0",
     "dependency-cruiser": "^18.6.0",
     "drizzle-kit": "^0.31.4",
@@ -88,6 +91,7 @@
     "vitest": "^5.0.5"
   },
   "allowScripts": {
+    "agent-browser@0.41.2": true,
     "better-sqlite3@12.11.1": true,
     "esbuild@0.18.20": true,
     "esbuild@0.25.12": true,

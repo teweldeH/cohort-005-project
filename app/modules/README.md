@@ -11,7 +11,7 @@ app/modules/
     tests/            ← tests + fixtures: private, test through the entry points.
 ```
 
-Copy `example/` to start a new module.
+Copy `example/` to start a new module. `npm run lint:modules` (in `npm run check` and the pre-commit hook) fails on a module that is missing an entry point, `lib/` or a test.
 
 **Import only through a module's entry points (its root files).** Anything in a subfolder is private, whatever the folder is called.
 

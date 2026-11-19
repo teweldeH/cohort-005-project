@@ -26,6 +26,8 @@ export const reviewSchema = z
             ),
         })
       )
-      .describe("One entry per finding you left unfixed. Empty is fine."),
+      .describe(
+        "One entry per finding you left unfixed in lines this PR wrote. A finding in code the diff only moved goes under Follow-ups in the verdict instead. Empty is fine."
+      ),
   })
   .describe("The review's inline comments.");

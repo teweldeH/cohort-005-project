@@ -1,8 +1,9 @@
 // Fails when a file is too big for an agent to read and edit in one go.
 // Tokens are estimated as bytes / 4, which is close enough for code.
 // Usage: node scripts/check-file-tokens.js <file>...
+//        npm run lint:tokens   (every tracked file)
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 
 const MAX_TOKENS = 5000;
 const BYTES_PER_TOKEN = 4;
@@ -15,12 +16,30 @@ const IGNORED = [
   /^\.github\/workflows\/[^/]+\.yml$/,
 ];
 
+// Files already over a size limit: the files of every .oxlintrc.json override
+// that turns `max-lines` off. That override is the one grandfather list for
+// both checks, so touching a grandfathered file never forces a split. Shrink
+// the list in a ticket of its own.
+const readGrandfathered = () => {
+  const jsonc = readFileSync(".oxlintrc.json", "utf8");
+  const config = JSON.parse(jsonc.replace(/^\s*\/\/.*$/gm, ""));
+  return new Set(
+    (config.overrides ?? [])
+      .filter((override) => override.rules?.["max-lines"] === "off")
+      .flatMap((override) => override.files)
+  );
+};
+
+const grandfathered = readGrandfathered();
+
 const isBinary = (contents) => contents.subarray(0, 8000).includes(0);
 
 const oversized = process.argv
   .slice(2)
   .map((file) => file.replaceAll("\\", "/").replace(`${process.cwd()}/`, ""))
   .filter((file) => !IGNORED.some((pattern) => pattern.test(file)))
+  .filter((file) => !grandfathered.has(file))
+  .filter((file) => existsSync(file) && statSync(file).isFile())
   .map((file) => ({ file, contents: readFileSync(file) }))
   .filter(({ contents }) => !isBinary(contents))
   .map(({ file, contents }) => ({
