@@ -27,6 +27,7 @@ import {
   computeResult,
   getBestAttempt,
   getQuizByLessonId,
+  getQuizInLesson,
   getQuizWithQuestions,
 } from "~/modules/lesson-viewer/quiz.server";
 import {
@@ -44,8 +45,6 @@ import { isBookmarked, toggleBookmark } from "~/lib/bookmarks.server";
 import { getNote, saveNote } from "~/lib/notes.server";
 import { MAX_NOTE_LENGTH } from "~/lib/notes";
 import { db } from "~/db";
-import { quizzes } from "~/db/schema";
-import { eq } from "drizzle-orm";
 import { renderMarkdown } from "~/lib/markdown.server";
 import { parseFormData } from "~/lib/validation";
 import { Button } from "~/components/ui/button";
@@ -73,6 +72,10 @@ const saveNoteSchema = z.object({
       MAX_NOTE_LENGTH,
       `Your note is over ${MAX_NOTE_LENGTH.toLocaleString("en")} characters, so it was not saved.`
     ),
+});
+
+const submitQuizSchema = z.object({
+  quizId: z.coerce.number().int(),
 });
 
 const deleteCommentSchema = z.object({
@@ -429,14 +432,15 @@ export async function action({ params, request }: Route.ActionArgs) {
   }
 
   if (intent === "submit-quiz") {
-    const quizId = Number(formData.get("quizId"));
-    if (isNaN(quizId)) {
+    const parsedQuiz = parseFormData(formData, submitQuizSchema);
+    if (!parsedQuiz.success) {
       throw data("Invalid quiz ID", { status: 400 });
     }
+    const { quizId } = parsedQuiz.data;
     // Scope the quiz to this lesson so a quiz elsewhere can't be reached by
     // posting its id to this route.
-    const quiz = db.select().from(quizzes).where(eq(quizzes.id, quizId)).get();
-    if (!quiz || quiz.lessonId !== lessonId) {
+    const quiz = getQuizInLesson(quizId, lessonId);
+    if (!quiz) {
       throw data("Quiz not found", { status: 404 });
     }
 
