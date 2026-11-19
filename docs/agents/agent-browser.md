@@ -7,16 +7,43 @@ built for exactly this — one command per action, an answer on stdout.
 
 ## Once, per machine
 
+`npm ci` installs agent-browser: it is a pinned devDependency, run as
+`npx agent-browser`. It drives the Chrome you have installed. With no Chrome:
+
 ```bash
-npm install -g agent-browser
-agent-browser install
+npx agent-browser install
 ```
+
+In the factory workflows, `.github/actions/dev-server` has done all of this:
+`agent-browser` is on PATH and the dev server is already running on
+`http://localhost:5173`, logging to `/tmp/dev.log`. Skip to the questions.
 
 ## Asking your own question
 
 Start the app with `npm run dev` first. The examples below use
 `http://localhost:5173`, the dev server's default address — if `npm run dev`
 printed a different one, use that.
+
+## Seeded users
+
+`npm run db:seed` is deterministic, so these hold on every fresh database.
+Switch user by posting to `/api/switch-user` from inside the page:
+
+```bash
+agent-browser eval "fetch('/api/switch-user',{method:'POST',body:new URLSearchParams({userId:'5'})}).then(r=>r.status)"
+```
+
+| id  | Name             | Role       | Use it for                                                                                            |
+| --- | ---------------- | ---------- | ----------------------------------------------------------------------------------------------------- |
+| 1   | Alex Rivera      | admin      | admin pages                                                                                           |
+| 2   | Sarah Chen       | instructor | teaches `introduction-to-typescript` and `design-systems-with-tailwind`                               |
+| 3   | Marcus Johnson   | instructor | teaches `building-rest-apis-with-nodejs`                                                              |
+| 5   | Emma Wilson      | student    | enrolled in `introduction-to-typescript` and `building-rest-apis-with-nodejs`; locked out of the rest |
+| 10  | Bossy McBossface | student    | enrolled in nothing                                                                                   |
+
+Lessons in `introduction-to-typescript` are ids 1–19, and lessons 3 and 8 have
+a quiz. `/courses/design-systems-with-tailwind/lessons/40` shows Emma the
+locked view.
 
 A screenshot is pixels. To verify a fix you need a yes or a no, so read the
 DOM:

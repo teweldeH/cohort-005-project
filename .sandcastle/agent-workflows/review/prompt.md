@@ -38,5 +38,8 @@ Write your verdict on the branch, after your fixes, to /tmp/review-verdict.md:
     The retro reads this list.
 
 When the change shows in the UI, save screenshots as PNGs in /tmp/evidence/.
+The dev server is already running on http://localhost:5173 (log:
+/tmp/dev.log) and `agent-browser` is on PATH: see docs/agents/agent-browser.md
+for the commands and the seeded users.
 Reference each in the verdict by its absolute path, e.g.
 `![after](/tmp/evidence/after.png)`. The workflow uploads them.

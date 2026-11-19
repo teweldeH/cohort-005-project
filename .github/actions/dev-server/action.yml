@@ -1,0 +1,64 @@
+name: Start the dev server and the browser
+description: >
+  Gives the agent a running app and a browser to drive it with, so it spends
+  no turns installing agent-browser or waiting on `npm run dev`. Run it after
+  `npm ci` and the database seed. Stop the server with
+  `kill -- -"$(cat /tmp/dev.pid)"` (its whole process group) before any step
+  that holds a token: the server runs code the agent edits.
+
+runs:
+  using: composite
+  steps:
+    - name: Put agent-browser on PATH
+      # A pinned devDependency, so `npm ci` installed it from the npm cache
+      # that setup-node restores. Nothing to download here.
+      shell: bash
+      run: echo "$GITHUB_WORKSPACE/node_modules/.bin" >> "$GITHUB_PATH"
+
+    - name: Look for a Chrome
+      # agent-browser uses an installed Chrome. ubuntu-latest ships one, so
+      # the download below only runs on a runner without it.
+      id: chrome
+      shell: bash
+      run: |
+        if command -v google-chrome >/dev/null || command -v google-chrome-stable >/dev/null; then
+          echo "found=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "found=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Cache the agent-browser Chrome
+      if: steps.chrome.outputs.found == 'false'
+      uses: actions/cache@v4
+      with:
+        path: ~/.agent-browser
+        key: agent-browser-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+    - name: Download a Chrome
+      if: steps.chrome.outputs.found == 'false'
+      shell: bash
+      run: agent-browser install --with-deps
+
+    - name: Start the dev server
+      shell: bash
+      run: |
+        set -euo pipefail
+        # setsid makes the server its own process group, so one kill stops
+        # npm, react-router and Vite together.
+        setsid nohup npm run dev -- --port 5173 --strictPort > /tmp/dev.log 2>&1 &
+        echo $! > /tmp/dev.pid
+        for _ in $(seq 60); do
+          curl -sf -o /dev/null http://localhost:5173/ && break
+          sleep 1
+        done
+        if ! curl -sf -o /dev/null http://localhost:5173/; then
+          echo "::error::The dev server did not answer on :5173 within 60s."
+          cat /tmp/dev.log
+          exit 1
+        fi
+        # Vite re-optimizes dependencies on the first page loads and reloads
+        # the page when it does. Take that hit here, not mid-interaction.
+        # See docs/agents/agent-browser.md.
+        curl -sf -o /dev/null http://localhost:5173/courses || true
+        curl -sf -o /dev/null http://localhost:5173/courses/introduction-to-typescript || true
+        echo "Dev server up on http://localhost:5173 (log: /tmp/dev.log)."
