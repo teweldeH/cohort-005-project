@@ -365,8 +365,8 @@ export function CommentThread({
   instructorName: string;
 }) {
   return (
-    <Card className="mb-8">
-      <CardContent className="p-6">
+    <Card className="mb-8 gap-0">
+      <CardContent className="px-6">
         <div className="mb-4 flex items-center gap-2">
           <MessageSquare className="size-5 text-primary" />
           <h2 className="text-xl font-semibold">Questions &amp; Discussion</h2>

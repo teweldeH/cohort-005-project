@@ -44,7 +44,7 @@ import {
 import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
-import { Textarea } from "~/components/ui/textarea";
+import { LessonNote } from "~/components/lesson-note";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -57,7 +57,6 @@ import {
   BookmarkCheck,
   Github,
   HelpCircle,
-  NotebookPen,
   MapPin,
   PlayCircle,
   ShieldAlert,
@@ -65,7 +64,7 @@ import {
   Trophy,
   RotateCcw,
 } from "lucide-react";
-import { cn, formatDuration, formatRelativeTime } from "~/lib/utils";
+import { cn, formatDuration } from "~/lib/utils";
 import { renderMarkdown } from "~/lib/markdown.server";
 import { YouTubePlayer } from "~/components/youtube-player";
 import { data, isRouteErrorResponse } from "react-router";
@@ -94,6 +93,10 @@ const saveNoteSchema = z.object({
       MAX_NOTE_LENGTH,
       `Your note is over ${MAX_NOTE_LENGTH.toLocaleString("en")} characters, so it was not saved.`
     ),
+});
+
+const submitQuizSchema = z.object({
+  quizId: z.coerce.number().int(),
 });
 
 const deleteCommentSchema = z.object({
@@ -964,10 +967,11 @@ export async function action({ params, request }: Route.ActionArgs) {
   }
 
   if (intent === "submit-quiz") {
-    const quizId = Number(formData.get("quizId"));
-    if (isNaN(quizId)) {
+    const parsedQuiz = parseFormData(formData, submitQuizSchema);
+    if (!parsedQuiz.success) {
       throw data("Invalid quiz ID", { status: 400 });
     }
+    const { quizId } = parsedQuiz.data;
     // Scope the quiz to this lesson so a quiz elsewhere can't be reached by
     // posting its id to this route.
     const quiz = db.select().from(quizzes).where(eq(quizzes.id, quizId)).get();
@@ -1258,7 +1262,7 @@ function FullLesson({
           )}
 
           {/* Note — under the video, so the Student can write while they watch */}
-          {currentUserId && <LessonNote note={note} />}
+          {currentUserId && <LessonNote key={lesson.id} note={note} />}
 
           {/* Lesson Content */}
           {contentHtml && (
@@ -1412,52 +1416,6 @@ function BookmarkToggle({ bookmarked }: { bookmarked: boolean }) {
         {bookmarked ? "Bookmarked" : "Bookmark"}
       </Button>
     </fetcher.Form>
-  );
-}
-
-function LessonNote({
-  note,
-}: {
-  note: Route.ComponentProps["loaderData"]["note"];
-}) {
-  const fetcher = useFetcher<{ ok: boolean; error?: string }>();
-  const isSaving = fetcher.state !== "idle";
-  const error = fetcher.data?.error;
-
-  return (
-    <Card className="mb-8">
-      <CardContent className="space-y-3 pt-6">
-        <div className="flex items-center gap-2">
-          <NotebookPen className="size-4 text-muted-foreground" />
-          <h2 className="font-semibold">Your notes</h2>
-        </div>
-
-        <fetcher.Form method="post" className="space-y-3">
-          <input type="hidden" name="intent" value="save-note" />
-          <Textarea
-            name="body"
-            rows={6}
-            defaultValue={note?.body ?? ""}
-            placeholder="Only you can read this."
-            className="resize-y"
-          />
-          <div className="flex items-center gap-3">
-            <Button type="submit" size="sm" disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save"}
-            </Button>
-            {error && <span className="text-sm text-red-600">{error}</span>}
-            {!error && note && (
-              <span
-                suppressHydrationWarning
-                className="text-xs text-muted-foreground"
-              >
-                Last edited {formatRelativeTime(note.updatedAt)}
-              </span>
-            )}
-          </div>
-        </fetcher.Form>
-      </CardContent>
-    </Card>
   );
 }
 
