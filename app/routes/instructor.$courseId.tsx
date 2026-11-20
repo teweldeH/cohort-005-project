@@ -59,6 +59,7 @@ import {
 import { data, isRouteErrorResponse } from "react-router";
 import { z } from "zod";
 import { parseFormData } from "~/lib/validation";
+import { formatLessonCount } from "~/modules/lesson-count";
 
 function getUserById(id: number) {
   return db.select().from(users).where(eq(users.id, id)).get();
@@ -1615,7 +1616,7 @@ export default function InstructorCourseEditor({
         <div className="mt-4 flex flex-wrap items-center gap-4 px-3 text-sm text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <BookOpen className="size-4" />
-            {lessonCount} {lessonCount === 1 ? "lesson" : "lessons"}
+            {formatLessonCount(lessonCount)}
           </span>
           <span className="flex items-center gap-1.5">
             <Users className="size-4" />
@@ -1702,10 +1703,7 @@ export default function InstructorCourseEditor({
                                         moduleId={mod.id}
                                       />
                                       <p className="mt-1 px-2 text-sm text-muted-foreground">
-                                        {mod.lessons.length}{" "}
-                                        {mod.lessons.length === 1
-                                          ? "lesson"
-                                          : "lessons"}
+                                        {formatLessonCount(mod.lessons.length)}
                                       </p>
                                     </div>
                                   </div>

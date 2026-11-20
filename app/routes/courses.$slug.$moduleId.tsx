@@ -265,7 +265,7 @@ export default function ModuleDetail({ loaderData }: Route.ComponentProps) {
       <div className="mb-6 flex items-center gap-4 text-sm text-muted-foreground">
         <span className="flex items-center gap-1">
           <BookOpen className="size-4" />
-          {totalLessons} {totalLessons === 1 ? "lesson" : "lessons"}
+          {formatLessonCount(totalLessons)}
         </span>
         {totalDuration > 0 && (
           <span className="flex items-center gap-1">
