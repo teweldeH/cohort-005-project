@@ -1516,7 +1516,7 @@ function CurriculumSidebar({
                               isCompleted ? (
                                 <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
                               ) : isInProgress ? (
-                                <PlayCircle className="size-3.5 shrink-0 text-blue-500" />
+                                <PlayCircle className="size-3.5 shrink-0 text-primary" />
                               ) : (
                                 <Circle className="size-3.5 shrink-0" />
                               )

@@ -332,7 +332,7 @@ export default function ModuleDetail({ loaderData }: Route.ComponentProps) {
                   isCompleted ? (
                     <CheckCircle2 className="size-4 shrink-0 text-green-500" />
                   ) : isInProgress ? (
-                    <PlayCircle className="size-4 shrink-0 text-blue-500" />
+                    <PlayCircle className="size-4 shrink-0 text-primary" />
                   ) : (
                     <Circle className="size-4 shrink-0 text-muted-foreground" />
                   )
