@@ -7,39 +7,47 @@ Review it with the code-review skill, .agents/skills/code-review/SKILL.md:
 - spec: /tmp/review-spec.md
 - standards: CODING_STANDARDS.md
 
-Leave the human reviewer as little as possible. Fix every finding you can on
-`{{BRANCH}}`, and commit each fix through the pre-commit hook. The workflow
-pushes your commits. Leave `.github/` untouched.
+A split that `scripts/check-file-tokens.js` forced is in scope for any
+ticket: tell both axes so. Check moved code with
+`git diff --color-moved=plain --color-moved-ws=allow-indentation-change origin/{{BASE_REF}}...HEAD`,
+which shows any line that changed on the way.
 
-Each finding goes in exactly one place, so the human reads it once:
+## Fix everything a person does not have to decide
 
-- **Fixed**: in the verdict, in full.
-- **Left, in lines this PR wrote**: an inline comment on its file and line,
-  in full. You will be asked for these as structured output. The verdict
-  only counts them.
-- **Left, in code the diff only moved or touched in passing**: one line under
-  Follow-ups in the verdict. These get no inline comment.
+The human reviewer gets **decisions** only: product behaviour the ticket
+leaves open, or a trade-off between two documented rules. Everything else you
+fix on `{{BRANCH}}`, however large: deepening a module, taking `db` as a
+parameter, writing the tests a module lacks, extracting a shared component,
+splitting a function off a lint exemption list. A fix is done when
+`npm run check` passes and the hook accepts its commit. Commit each fix on
+its own. The workflow pushes your commits. Leave `.github/` untouched.
+
+Every finding you leave becomes an inline comment on the first line it
+concerns, one comment per finding. You will be asked for them as structured
+output. Its body says what decision it needs.
+
+## The verdict
 
 Write your verdict on the branch, after your fixes, to /tmp/review-verdict.md:
 
     ## Standards: PASS | CHANGES REQUESTED
-    One line of reasoning. Then the fixed findings, worst first: its commit,
-    the rule by heading, what changed. Then one line: "N findings left as
-    inline comments."
+    One line of reasoning, then each finding you fixed, worst first: its
+    commit, citing the rule by heading.
 
     ## Spec: PASS | CHANGES REQUESTED
-    The same shape, for the spec.
-
-    ## Follow-ups
-    One line each: file, the rule by heading, the problem. Omit when empty.
+    One line of reasoning, then each finding you fixed.
 
     ## Rules this review wanted and could not find
     Anything you wanted to fail the change for that no standard covers.
     The retro reads this list.
 
-When the change shows in the UI, save screenshots as PNGs in /tmp/evidence/.
-The dev server is already running on http://localhost:5173 (log:
-/tmp/dev.log) and `agent-browser` is on PATH: see docs/agents/agent-browser.md
-for the commands and the seeded users.
-Reference each in the verdict by its absolute path, e.g.
-`![after](/tmp/evidence/after.png)`. The workflow uploads them.
+The workflow adds the findings you left to each section, from your structured
+output. They appear there once, not in your text.
+
+## Evidence
+
+When your fixes change the UI, save an after screenshot of each as a PNG in
+/tmp/evidence/. Check the PR's own after state in the browser too; its before
+is already in the PR body. Reference each screenshot in the verdict by its
+absolute path, e.g. `![after](/tmp/evidence/after.png)`. The workflow uploads
+them.

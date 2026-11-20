@@ -12,6 +12,10 @@ name: Agent — Implement A Ticket
 #   agent committed. Draft, always: the human checkpoint we removed from the
 #   *build* has not been removed from the *merge*.
 #
+#   Then it hands that pull request to the reviewer: it adds `agent:review`,
+#   which starts agent-review.yml. The reviewer marks the PR ready once its
+#   verdict is posted. The merge stays a human's.
+#
 #   Every run pushes to a branch of its own, `agent/issue-<n>-<run id>`. A
 #   retry never pushes onto the branch an earlier run left behind, so nothing
 #   is there to reject the push and no run's work is lost. Two runs on one
@@ -30,7 +34,8 @@ name: Agent — Implement A Ticket
 #     step that talks to GitHub uses it: reading the ticket, pushing, opening
 #     the pull request, commenting. One token for the whole factory, because some
 #     hops need it anyway — by default the built-in GITHUB_TOKEN cannot open a
-#     pull request at all, and a label it applies starts no workflow.
+#     pull request at all, and a label it applies starts no workflow. That
+#     second hop is `agent:review`, the label that starts the reviewer.
 #   secrets.GITHUB_TOKEN — supplied by Actions, and now used for one thing:
 #     the checkout. The `permissions:` block below shrinks it to match.
 #   The `agent:implement` label. A fresh clone of this repository does not
@@ -132,6 +137,19 @@ jobs:
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 
+      - name: Cache agent-browser's Chrome
+        uses: actions/cache@v4
+        with:
+          path: ~/.agent-browser/browsers
+          key: agent-browser-0.27.0-${{ runner.os }}
+
+      - name: Install agent-browser
+        # The agent drives the app with it for screenshots and checks. Without
+        # it here, each run installs it mid-session.
+        run: |
+          npm install -g agent-browser@0.27.0
+          agent-browser install
+
       - name: Migrate and seed the database
         # The agent gets a real database, because half of this repo's checks
         # need one. It is disposable: a fresh one, migrated and seeded, on
@@ -182,24 +200,10 @@ jobs:
           ' /tmp/ticket.json > /tmp/ticket.md
           cat /tmp/ticket.md
 
-      - name: Start the dev server and the browser
-        uses: ./.github/actions/dev-server
-
       - name: Build the ticket
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # `npm run test:mutation` grades every commit the agent makes, not
-          # just its uncommitted edits. See scripts/mutate-diff.ts.
-          MUTATION_BASE: ${{ steps.branch.outputs.base }}
         run: npx tsx .sandcastle/agent-workflows/implement/implement.ts
-
-      - name: Stop the dev server
-        # Before any step that holds a token: the server runs code the agent
-        # edited. agent-browser's Chrome goes with it.
-        if: always()
-        run: |
-          [ -f /tmp/dev.pid ] && kill -- -"$(cat /tmp/dev.pid)" || true
-          agent-browser close >/dev/null 2>&1 || true
 
       - name: Check the agent committed
         # The agent owns the commits now, so this step owns the question of
@@ -255,7 +259,7 @@ jobs:
             echo "---"
             echo ""
             echo "Closes #${ISSUE_NUMBER}. Built unattended by [this run](${RUN_URL})."
-            echo "Nobody has read this yet. That is what the draft state is for."
+            echo "The reviewer has been asked to read it. It stays a draft until the verdict is posted."
           } >> "$body_file"
 
           # nullglob: no screenshots means no --attach, and the PR still opens.
@@ -271,6 +275,25 @@ jobs:
             --body-file "$body_file" \
             "${attach[@]}")"
           echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Hand the pull request to the reviewer
+        id: handoff
+        env:
+          # The other hop that needs FACTORY_PAT. agent-review.yml triggers
+          # on `pull_request: [labeled]`, and a label applied with the
+          # built-in token starts no workflow. With GITHUB_TOKEN the label
+          # lands, the run goes green, and the reviewer never wakes.
+          GH_TOKEN: ${{ secrets.FACTORY_PAT }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+        run: |
+          set -euo pipefail
+          gh label create "agent:review" --color 5319E7 \
+            --description "Ask the review workflow to read this pull request" || true
+
+          # No `|| true` here, on purpose. If this fails, the chain has
+          # stopped at its last hop, and a red run says so. A green run over
+          # a chain that stopped says nothing.
+          gh pr edit "$PR_URL" --add-label "agent:review"
 
       - name: Mark blocked on failure
         if: failure()
@@ -288,7 +311,15 @@ jobs:
           where=""
           [ -n "$PR_URL" ] && where=" Pull request: ${PR_URL}, from \`${BRANCH}\`."
           retry=""
-          [ "$JOB_STATUS" = "failure" ] && retry=" Re-add \`agent:implement\` to retry."
+          if [ "$JOB_STATUS" = "failure" ]; then
+            if [ -n "$PR_URL" ]; then
+              # The pull request exists. Only the hand-off failed, so a new
+              # implement run would build a second pull request.
+              retry=" The pull request was not handed to the reviewer. Add \`agent:review\` to it to have it reviewed."
+            else
+              retry=" Re-add \`agent:implement\` to retry."
+            fi
+          fi
           # Tagged, so the next run on this ticket leaves it out of the ticket.
           gh issue comment "$ISSUE_NUMBER" --body \
             "Implementer run **${JOB_STATUS}** — [logs](${RUN_URL}).${where}${retry} <!-- factory:status -->"

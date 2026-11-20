@@ -4,7 +4,10 @@ name: Agent — Review A Pull Request
 # built.
 #
 # WHAT TRIGGERS IT
-#   Someone puts the `agent:review` label on a pull request.
+#   Someone puts the `agent:review` label on a pull request. The
+#   implementer does this itself for every pull request it opens, and so does
+#   agent-implement-spec.yml. Add it by hand to review again, or when that
+#   hand-off failed.
 #
 # THE POINT OF THIS FILE: IT IS MEMORY-LESS
 #   This workflow shares nothing with the implementer run. No session, no
@@ -87,7 +90,7 @@ jobs:
   review:
     if: github.event.label.name == 'agent:review'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     env:
       GH_REPO: ${{ github.repository }}
@@ -163,6 +166,19 @@ jobs:
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 
+      - name: Cache agent-browser's Chrome
+        uses: actions/cache@v4
+        with:
+          path: ~/.agent-browser/browsers
+          key: agent-browser-0.27.0-${{ runner.os }}
+
+      - name: Install agent-browser
+        # The agent drives the app with it for screenshots and checks. Without
+        # it here, each run installs it mid-session.
+        run: |
+          npm install -g agent-browser@0.27.0
+          agent-browser install
+
       - name: Migrate and seed the database
         # The pre-commit hook runs on every commit the agent makes, and the
         # repo's checks need a database.
@@ -183,25 +199,11 @@ jobs:
             exit 1
           fi
 
-      - name: Start the dev server and the browser
-        uses: ./.github/actions/dev-server
-
       - name: Review the pull request
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OUTPUT_DIR: ${{ runner.temp }}
-          # `npm run test:mutation` grades the whole PR, not just the
-          # review's own uncommitted edits. See scripts/mutate-diff.ts.
-          MUTATION_BASE: origin/${{ github.event.pull_request.base.ref }}
         run: npx tsx .sandcastle/agent-workflows/review/review.ts
-
-      - name: Stop the dev server
-        # Before any step that holds a token: the server runs code the agent
-        # edited. agent-browser's Chrome goes with it.
-        if: always()
-        run: |
-          [ -f /tmp/dev.pid ] && kill -- -"$(cat /tmp/dev.pid)" || true
-          agent-browser close >/dev/null 2>&1 || true
 
       - name: Push the review's fixes
         id: push

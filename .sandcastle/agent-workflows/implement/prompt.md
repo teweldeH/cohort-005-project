@@ -19,9 +19,7 @@ Read CODING_STANDARDS.md.
   pushes and opens the pull request.
 - Leave `.github/` untouched.
 - When the change shows in the UI, save a before and an after screenshot as
-  PNGs in /tmp/evidence/. The dev server is already running on
-  http://localhost:5173 (log: /tmp/dev.log) and `agent-browser` is on PATH:
-  see docs/agents/agent-browser.md for the commands and the seeded users.
+  PNGs in /tmp/evidence/.
 
 Write /tmp/pr-body.md in the voice of the `pr` skill: what the ticket asked
 for, what you built, what you deliberately left out. In its Evidence section,
