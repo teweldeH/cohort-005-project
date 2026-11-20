@@ -1,4 +1,5 @@
-import { NavLink, Form } from "react-router";
+import { Link, NavLink, Form, useLocation } from "react-router";
+import { activeNavTarget } from "~/lib/active-nav";
 import { cn } from "~/lib/utils";
 import { UserRole } from "~/db/schema";
 import { UserAvatar } from "~/components/user-avatar";
@@ -129,6 +130,14 @@ export function Sidebar({
 }: SidebarProps) {
   const currentUserRole = currentUser?.role ?? null;
   const { isDark, toggle: toggleDarkMode } = useTheme();
+  const { pathname } = useLocation();
+  const visibleItems = navItems.filter((item) =>
+    isVisible(item, currentUserRole)
+  );
+  const activeTo = activeNavTarget(
+    visibleItems.map((item) => item.to),
+    pathname
+  );
 
   return (
     <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
@@ -138,25 +147,22 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
-        {navItems
-          .filter((item) => isVisible(item, currentUserRole))
-          .map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )
-              }
-            >
-              {item.icon}
-              {item.label}
-            </NavLink>
-          ))}
+        {visibleItems.map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            aria-current={item.to === activeTo ? "page" : undefined}
+            className={cn(
+              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              item.to === activeTo
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            )}
+          >
+            {item.icon}
+            {item.label}
+          </Link>
+        ))}
         {isTeamAdmin && (
           <NavLink
             to="/team"
