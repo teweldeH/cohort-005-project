@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { Route } from "./+types/login";
 import { setCurrentUserId, getCurrentUserId } from "~/lib/session";
 import { parseFormData } from "~/lib/validation";
+import { AuthShell } from "~/components/auth-shell";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Card, CardContent } from "~/components/ui/card";
@@ -89,76 +90,64 @@ export default function Login() {
   const redirectTo = searchParams.get("redirectTo");
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <Link to="/" className="text-2xl font-bold tracking-tight">
-            Cadence
-          </Link>
-          <h1 className="mt-4 text-xl font-semibold">Welcome back</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Log in to continue learning
-          </p>
-        </div>
+    <AuthShell title="Welcome back" subtitle="Log in to continue learning">
+      <Card className="shadow-lg shadow-indigo-500/5">
+        <CardContent className="p-6">
+          <Form method="post" className="space-y-4">
+            <div>
+              <label
+                htmlFor="email"
+                className="mb-1.5 block text-sm font-medium"
+              >
+                Email
+              </label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="you@example.com"
+                defaultValue={actionData?.values?.email ?? ""}
+                aria-invalid={!!actionData?.errors?.email}
+              />
+              {actionData?.errors?.email && (
+                <p className="mt-1 text-sm text-destructive">
+                  {actionData.errors.email}{" "}
+                  {actionData.errors.email.includes("No account") && (
+                    <Link
+                      to={
+                        redirectTo
+                          ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}`
+                          : "/signup"
+                      }
+                      className="font-medium text-primary hover:underline"
+                    >
+                      Sign up instead
+                    </Link>
+                  )}
+                </p>
+              )}
+            </div>
 
-        <Card>
-          <CardContent className="p-6">
-            <Form method="post" className="space-y-4">
-              <div>
-                <label
-                  htmlFor="email"
-                  className="mb-1.5 block text-sm font-medium"
-                >
-                  Email
-                </label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  defaultValue={actionData?.values?.email ?? ""}
-                  aria-invalid={!!actionData?.errors?.email}
-                />
-                {actionData?.errors?.email && (
-                  <p className="mt-1 text-sm text-destructive">
-                    {actionData.errors.email}{" "}
-                    {actionData.errors.email.includes("No account") && (
-                      <Link
-                        to={
-                          redirectTo
-                            ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}`
-                            : "/signup"
-                        }
-                        className="font-medium text-primary hover:underline"
-                      >
-                        Sign up instead
-                      </Link>
-                    )}
-                  </p>
-                )}
-              </div>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Logging in..." : "Log In"}
+            </Button>
+          </Form>
+        </CardContent>
+      </Card>
 
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? "Logging in..." : "Log In"}
-              </Button>
-            </Form>
-          </CardContent>
-        </Card>
-
-        <p className="mt-4 text-center text-sm text-muted-foreground">
-          Don't have an account?{" "}
-          <Link
-            to={
-              redirectTo
-                ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}`
-                : "/signup"
-            }
-            className="font-medium text-primary hover:underline"
-          >
-            Sign up
-          </Link>
-        </p>
-      </div>
-    </div>
+      <p className="mt-4 text-center text-sm text-muted-foreground">
+        Don't have an account?{" "}
+        <Link
+          to={
+            redirectTo
+              ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}`
+              : "/signup"
+          }
+          className="font-medium text-primary hover:underline"
+        >
+          Sign up
+        </Link>
+      </p>
+    </AuthShell>
   );
 }

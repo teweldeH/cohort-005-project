@@ -11,6 +11,7 @@ import type { Route } from "./+types/signup";
 import { UserRole, users } from "~/db/schema";
 import { setCurrentUserId, getCurrentUserId } from "~/lib/session";
 import { parseFormData } from "~/lib/validation";
+import { AuthShell } from "~/components/auth-shell";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Card, CardContent } from "~/components/ui/card";
@@ -104,86 +105,74 @@ export default function SignUp() {
   const redirectTo = searchParams.get("redirectTo");
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <Link to="/" className="text-2xl font-bold tracking-tight">
-            Cadence
-          </Link>
-          <h1 className="mt-4 text-xl font-semibold">Create your account</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Start learning today
-          </p>
-        </div>
+    <AuthShell title="Create your account" subtitle="Start learning today">
+      <Card className="shadow-lg shadow-indigo-500/5">
+        <CardContent className="p-6">
+          <Form method="post" className="space-y-4">
+            <div>
+              <label
+                htmlFor="name"
+                className="mb-1.5 block text-sm font-medium"
+              >
+                Name
+              </label>
+              <Input
+                id="name"
+                name="name"
+                type="text"
+                placeholder="Your name"
+                defaultValue={actionData?.values?.name ?? ""}
+                aria-invalid={!!actionData?.errors?.name}
+              />
+              {actionData?.errors?.name && (
+                <p className="mt-1 text-sm text-destructive">
+                  {actionData.errors.name}
+                </p>
+              )}
+            </div>
 
-        <Card>
-          <CardContent className="p-6">
-            <Form method="post" className="space-y-4">
-              <div>
-                <label
-                  htmlFor="name"
-                  className="mb-1.5 block text-sm font-medium"
-                >
-                  Name
-                </label>
-                <Input
-                  id="name"
-                  name="name"
-                  type="text"
-                  placeholder="Your name"
-                  defaultValue={actionData?.values?.name ?? ""}
-                  aria-invalid={!!actionData?.errors?.name}
-                />
-                {actionData?.errors?.name && (
-                  <p className="mt-1 text-sm text-destructive">
-                    {actionData.errors.name}
-                  </p>
-                )}
-              </div>
+            <div>
+              <label
+                htmlFor="email"
+                className="mb-1.5 block text-sm font-medium"
+              >
+                Email
+              </label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="you@example.com"
+                defaultValue={actionData?.values?.email ?? ""}
+                aria-invalid={!!actionData?.errors?.email}
+              />
+              {actionData?.errors?.email && (
+                <p className="mt-1 text-sm text-destructive">
+                  {actionData.errors.email}
+                </p>
+              )}
+            </div>
 
-              <div>
-                <label
-                  htmlFor="email"
-                  className="mb-1.5 block text-sm font-medium"
-                >
-                  Email
-                </label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  defaultValue={actionData?.values?.email ?? ""}
-                  aria-invalid={!!actionData?.errors?.email}
-                />
-                {actionData?.errors?.email && (
-                  <p className="mt-1 text-sm text-destructive">
-                    {actionData.errors.email}
-                  </p>
-                )}
-              </div>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Creating account..." : "Sign Up"}
+            </Button>
+          </Form>
+        </CardContent>
+      </Card>
 
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? "Creating account..." : "Sign Up"}
-              </Button>
-            </Form>
-          </CardContent>
-        </Card>
-
-        <p className="mt-4 text-center text-sm text-muted-foreground">
-          Already have an account?{" "}
-          <Link
-            to={
-              redirectTo
-                ? `/login?redirectTo=${encodeURIComponent(redirectTo)}`
-                : "/login"
-            }
-            className="font-medium text-primary hover:underline"
-          >
-            Log in
-          </Link>
-        </p>
-      </div>
-    </div>
+      <p className="mt-4 text-center text-sm text-muted-foreground">
+        Already have an account?{" "}
+        <Link
+          to={
+            redirectTo
+              ? `/login?redirectTo=${encodeURIComponent(redirectTo)}`
+              : "/login"
+          }
+          className="font-medium text-primary hover:underline"
+        >
+          Log in
+        </Link>
+      </p>
+    </AuthShell>
   );
 }
