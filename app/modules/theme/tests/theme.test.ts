@@ -50,6 +50,12 @@ describe("oppositeTheme", () => {
   });
 });
 
+describe("THEME_STORAGE_KEY", () => {
+  it("keeps the key visitors already have a theme saved under", () => {
+    expect(THEME_STORAGE_KEY).toBe("cadence-theme");
+  });
+});
+
 describe("applyTheme", () => {
   it("adds the dark class and remembers dark", () => {
     const root = fakeRoot();
