@@ -38,6 +38,7 @@ import {
 import { Skeleton } from "~/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/tabs";
 import { AlertTriangle, Rocket } from "lucide-react";
+import { formatLessonCount } from "~/modules/lesson-count";
 
 // ─── Instructor Analytics ───
 // What an instructor earned, and when. Three money figures rather than one:
@@ -297,8 +298,7 @@ function CourseProgress({ progress }: { progress: CourseProgressSummary }) {
             Lessons completed per enrolled student, across{" "}
             {progress.enrolledCount}{" "}
             {progress.enrolledCount === 1 ? "student" : "students"} and{" "}
-            {progress.totalLessons}{" "}
-            {progress.totalLessons === 1 ? "lesson" : "lessons"}.
+            {formatLessonCount(progress.totalLessons)}.
           </p>
         </CardContent>
       </Card>

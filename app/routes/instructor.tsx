@@ -22,6 +22,7 @@ import { CourseStatus } from "~/db/schema";
 import { db } from "~/db";
 import { courses, modules, lessons, enrollments } from "~/db/schema";
 import { eq, or, sql } from "drizzle-orm";
+import { formatLessonCount } from "~/modules/lesson-count";
 
 function getCoursesByInstructor(instructorId: number) {
   return db
@@ -232,10 +233,7 @@ export default function InstructorDashboard({
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1.5">
                     <BookOpen className="size-4" />
-                    <span>
-                      {course.lessonCount}{" "}
-                      {course.lessonCount === 1 ? "lesson" : "lessons"}
-                    </span>
+                    <span>{formatLessonCount(course.lessonCount)}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Users className="size-4" />

@@ -49,6 +49,7 @@ import { calculatePppPrice, countryName, getCountryTierInfo } from "~/lib/ppp";
 import { parseFormData } from "~/lib/validation";
 import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
 import { StarRating, StarRatingInput } from "~/components/star-rating";
+import { formatLessonCount } from "~/modules/lesson-count";
 
 function getCourseWithDetails(id: number) {
   const course = db
@@ -668,7 +669,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
           </span>
           <span className="flex items-center gap-1">
             <BookOpen className="size-4" />
-            {lessonCount} lessons
+            {formatLessonCount(lessonCount)}
           </span>
           {totalDuration > 0 && (
             <span className="flex items-center gap-1">
@@ -801,7 +802,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
               <div className="space-y-2 pt-2 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <BookOpen className="size-4" />
-                  <span>{lessonCount} lessons</span>
+                  <span>{formatLessonCount(lessonCount)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Clock className="size-4" />
@@ -981,7 +982,7 @@ function CourseContent({
                   </Link>
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  {mod.lessons.length} lessons
+                  {formatLessonCount(mod.lessons.length)}
                 </p>
               </CardHeader>
               <CardContent>

@@ -29,6 +29,7 @@ import {
   landingPage,
   type FeaturedCourse,
 } from "~/modules/landing-page/index.server";
+import { formatLessonCount } from "~/modules/lesson-count";
 
 // The accent is scoped to this page on purpose: the app.css tokens are shared
 // by every shadcn component, so a brand colour there is its own decision.
@@ -292,8 +293,7 @@ function CourseCard({ course }: { course: FeaturedCourse }) {
             </span>
             <span className="flex items-center gap-1">
               <BookOpen className="size-3" />
-              {course.lessonCount}{" "}
-              {course.lessonCount === 1 ? "lesson" : "lessons"}
+              {formatLessonCount(course.lessonCount)}
             </span>
           </span>
         </CardFooter>

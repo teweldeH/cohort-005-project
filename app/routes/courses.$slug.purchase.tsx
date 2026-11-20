@@ -40,6 +40,7 @@ import { calculatePppPrice, getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { parseFormData, parseParams } from "~/lib/validation";
 import { enrollStudent, isEnrolled } from "~/lib/enrollments.server";
 import { defaultNotifications } from "~/lib/notifications.server";
+import { formatLessonCount } from "~/modules/lesson-count";
 
 function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
@@ -418,7 +419,7 @@ export default function PurchaseConfirmation({
           <div className="mt-6 flex flex-wrap gap-6 border-t pt-6 text-sm text-muted-foreground">
             <span className="flex items-center gap-2">
               <BookOpen className="size-4" />
-              {lessonCount} {lessonCount === 1 ? "lesson" : "lessons"}
+              {formatLessonCount(lessonCount)}
             </span>
             <span className="flex items-center gap-2">
               <Clock className="size-4" />
