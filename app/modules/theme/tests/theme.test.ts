@@ -56,15 +56,15 @@ describe("applyTheme", () => {
     const storage = fakeStorage();
     applyTheme("dark", root, storage);
     expect([...root.classes]).toEqual(["dark"]);
-    expect(storage.items.get("cadence-theme")).toBe("dark");
+    expect(storage.items.get(THEME_STORAGE_KEY)).toBe("dark");
   });
 
   it("removes the dark class and remembers light", () => {
     const root = fakeRoot(["dark", "other"]);
-    const storage = fakeStorage({ "cadence-theme": "dark" });
+    const storage = fakeStorage({ [THEME_STORAGE_KEY]: "dark" });
     applyTheme("light", root, storage);
     expect([...root.classes]).toEqual(["other"]);
-    expect(storage.items.get("cadence-theme")).toBe("light");
+    expect(storage.items.get(THEME_STORAGE_KEY)).toBe("light");
   });
 
   it("still switches when storage refuses the write", () => {
@@ -79,47 +79,42 @@ describe("applyTheme", () => {
   });
 });
 
-describe("themeBootScript", () => {
-  function boot(stored: Record<string, string>) {
-    const root = fakeRoot();
-    const storage = fakeStorage(stored);
-    new Function("localStorage", "document", themeBootScript)(storage, {
-      documentElement: root,
-    });
-    return root;
-  }
+type BootStorage = { getItem(key: string): string | null };
 
+function boot(storage: BootStorage) {
+  const root = fakeRoot();
+  new Function("localStorage", "document", themeBootScript)(storage, {
+    documentElement: root,
+  });
+  return root;
+}
+
+describe("themeBootScript", () => {
   it("applies a stored dark theme before React loads", () => {
-    expect(boot({ [THEME_STORAGE_KEY]: "dark" }).classes.has("dark")).toBe(
-      true
-    );
+    expect(
+      boot(fakeStorage({ [THEME_STORAGE_KEY]: "dark" })).classes.has("dark")
+    ).toBe(true);
   });
 
   it("leaves the page light for a stored light theme or none", () => {
-    expect(boot({ [THEME_STORAGE_KEY]: "light" }).classes.size).toBe(0);
-    expect(boot({}).classes.size).toBe(0);
+    expect(
+      boot(fakeStorage({ [THEME_STORAGE_KEY]: "light" })).classes.size
+    ).toBe(0);
+    expect(boot(fakeStorage()).classes.size).toBe(0);
   });
 
   it("reads the same key that applyTheme writes", () => {
     const storage = fakeStorage();
     applyTheme("dark", fakeRoot(), storage);
-    const root = fakeRoot();
-    new Function("localStorage", "document", themeBootScript)(storage, {
-      documentElement: root,
-    });
-    expect(root.classes.has("dark")).toBe(true);
+    expect(boot(storage).classes.has("dark")).toBe(true);
   });
 
   it("does not throw when storage is unavailable", () => {
-    const run = () =>
-      new Function("localStorage", "document", themeBootScript)(
-        {
-          getItem: () => {
-            throw new Error("SecurityError");
-          },
-        },
-        { documentElement: fakeRoot() }
-      );
-    expect(run).not.toThrow();
+    const refusing = {
+      getItem: (): string | null => {
+        throw new Error("SecurityError");
+      },
+    };
+    expect(() => boot(refusing)).not.toThrow();
   });
 });
