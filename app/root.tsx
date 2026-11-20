@@ -11,6 +11,7 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 import { themeScript } from "~/modules/theme";
+import { Logo } from "~/components/logo";
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
@@ -94,9 +95,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
       <div className="text-center">
-        <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-muted">
-          <span className="text-2xl">!</span>
-        </div>
+        <Logo size="lg" className="mb-8" />
         <h1 className="mb-2 text-2xl font-bold">{title}</h1>
         <p className="mb-6 text-muted-foreground">{message}</p>
         <a
