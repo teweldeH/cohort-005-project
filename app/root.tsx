@@ -1,5 +1,4 @@
 import {
-  isRouteErrorResponse,
   Links,
   Meta,
   Outlet,
@@ -8,6 +7,7 @@ import {
   useNavigation,
 } from "react-router";
 
+import { describeError } from "~/modules/error-page";
 import type { Route } from "./+types/root";
 import "./app.css";
 
@@ -80,29 +80,13 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let title = "Something went wrong";
-  let message = "An unexpected error occurred.";
-  let stack: string | undefined;
-
-  if (isRouteErrorResponse(error)) {
-    if (error.status === 404) {
-      title = "Page not found";
-      message =
-        "The page you're looking for doesn't exist or may have been moved.";
-    } else {
-      title = `Error ${error.status}`;
-      message =
-        typeof error.data === "string"
-          ? error.data
-          : error.statusText || message;
-    }
-  } else if (import.meta.env.DEV && error && error instanceof Error) {
-    message = error.message;
-    stack = error.stack;
-  }
+  const { title, documentTitle, message, stack } = describeError(error, {
+    exposeDetails: import.meta.env.DEV,
+  });
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
+      <title>{documentTitle}</title>
       <div className="text-center">
         <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-muted">
           <span className="text-2xl">!</span>
