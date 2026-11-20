@@ -1,9 +1,10 @@
 import {
-  describeError as describe,
+  errorPageCopy,
   type ErrorPageCopy,
-} from "./lib/describe-error";
+  type ErrorPageOptions,
+} from "./lib/error-page-copy";
 
-export type { ErrorPageCopy };
+export type { ErrorPageCopy, ErrorPageOptions };
 
 /**
  * The heading, message and browser tab title for the root error page.
@@ -12,7 +13,7 @@ export type { ErrorPageCopy };
  */
 export function describeError(
   error: unknown,
-  options: { exposeDetails: boolean }
+  options: ErrorPageOptions
 ): ErrorPageCopy {
-  return describe(error, options);
+  return errorPageCopy(error, options);
 }

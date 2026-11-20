@@ -16,9 +16,11 @@ function withDocumentTitle(
   return { ...copy, documentTitle: `${copy.title} — Cadence` };
 }
 
-export function describeError(
+export type ErrorPageOptions = { exposeDetails: boolean };
+
+export function errorPageCopy(
   error: unknown,
-  { exposeDetails }: { exposeDetails: boolean }
+  { exposeDetails }: ErrorPageOptions
 ): ErrorPageCopy {
   if (isRouteErrorResponse(error)) {
     if (error.status === 404) {
