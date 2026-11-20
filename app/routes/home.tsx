@@ -145,6 +145,15 @@ function Header({ currentUser }: { currentUser: CurrentUser }) {
   );
 }
 
+function HeroBackdrop() {
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+      <div className="absolute -top-40 left-1/2 h-[32rem] w-[56rem] -translate-x-1/2 rounded-full bg-gradient-to-r from-indigo-400/30 via-violet-400/30 to-fuchsia-400/30 blur-3xl dark:from-indigo-600/25 dark:via-violet-600/25 dark:to-fuchsia-600/20" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgb(148_163_184/0.3)_1px,transparent_0)] [background-size:24px_24px] [mask-image:linear-gradient(to_bottom,black,transparent)]" />
+    </div>
+  );
+}
+
 function Hero({
   currentUser,
   totalCourses,
@@ -154,10 +163,7 @@ function Hero({
 }) {
   return (
     <section className="relative isolate overflow-hidden">
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -top-40 left-1/2 h-[32rem] w-[56rem] -translate-x-1/2 rounded-full bg-gradient-to-r from-indigo-400/30 via-violet-400/30 to-fuchsia-400/30 blur-3xl dark:from-indigo-600/25 dark:via-violet-600/25 dark:to-fuchsia-600/20" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgb(148_163_184/0.3)_1px,transparent_0)] [background-size:24px_24px] [mask-image:linear-gradient(to_bottom,black,transparent)]" />
-      </div>
+      <HeroBackdrop />
       <div className="mx-auto max-w-6xl px-6 pt-24 pb-28 text-center">
         <span className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white/70 px-4 py-1.5 text-sm font-medium text-indigo-700 shadow-sm dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
           <Sparkles className="size-4" />
