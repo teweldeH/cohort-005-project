@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Logo } from "~/components/logo";
+import { Card, CardContent } from "~/components/ui/card";
 
 /**
  * The frame around login and signup: the landing page's logo and soft
@@ -8,10 +9,13 @@ import { Logo } from "~/components/logo";
 export function AuthShell({
   title,
   subtitle,
+  footer,
   children,
 }: {
   title: string;
   subtitle: string;
+  /** The line under the card that links to the other auth page. */
+  footer: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -27,7 +31,12 @@ export function AuthShell({
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
         </div>
-        {children}
+        <Card className="shadow-lg shadow-primary/5">
+          <CardContent className="p-6">{children}</CardContent>
+        </Card>
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          {footer}
+        </p>
       </div>
     </div>
   );

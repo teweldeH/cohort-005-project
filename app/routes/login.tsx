@@ -13,7 +13,6 @@ import { parseFormData } from "~/lib/validation";
 import { AuthShell } from "~/components/auth-shell";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { Card, CardContent } from "~/components/ui/card";
 import { db } from "~/db";
 import { users } from "~/db/schema";
 import { eq } from "drizzle-orm";
@@ -88,66 +87,58 @@ export default function Login() {
   const isSubmitting = navigation.state === "submitting";
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
+  const signupHref = redirectTo
+    ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}`
+    : "/signup";
 
   return (
-    <AuthShell title="Welcome back" subtitle="Log in to continue learning">
-      <Card className="shadow-lg shadow-indigo-500/5">
-        <CardContent className="p-6">
-          <Form method="post" className="space-y-4">
-            <div>
-              <label
-                htmlFor="email"
-                className="mb-1.5 block text-sm font-medium"
-              >
-                Email
-              </label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="you@example.com"
-                defaultValue={actionData?.values?.email ?? ""}
-                aria-invalid={!!actionData?.errors?.email}
-              />
-              {actionData?.errors?.email && (
-                <p className="mt-1 text-sm text-destructive">
-                  {actionData.errors.email}{" "}
-                  {actionData.errors.email.includes("No account") && (
-                    <Link
-                      to={
-                        redirectTo
-                          ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}`
-                          : "/signup"
-                      }
-                      className="font-medium text-primary hover:underline"
-                    >
-                      Sign up instead
-                    </Link>
-                  )}
-                </p>
+    <AuthShell
+      title="Welcome back"
+      subtitle="Log in to continue learning"
+      footer={
+        <>
+          Don't have an account?{" "}
+          <Link
+            to={signupHref}
+            className="font-medium text-primary hover:underline"
+          >
+            Sign up
+          </Link>
+        </>
+      }
+    >
+      <Form method="post" className="space-y-4">
+        <div>
+          <label htmlFor="email" className="mb-1.5 block text-sm font-medium">
+            Email
+          </label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            placeholder="you@example.com"
+            defaultValue={actionData?.values?.email ?? ""}
+            aria-invalid={!!actionData?.errors?.email}
+          />
+          {actionData?.errors?.email && (
+            <p className="mt-1 text-sm text-destructive">
+              {actionData.errors.email}{" "}
+              {actionData.errors.email.includes("No account") && (
+                <Link
+                  to={signupHref}
+                  className="font-medium text-primary hover:underline"
+                >
+                  Sign up instead
+                </Link>
               )}
-            </div>
+            </p>
+          )}
+        </div>
 
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Logging in..." : "Log In"}
-            </Button>
-          </Form>
-        </CardContent>
-      </Card>
-
-      <p className="mt-4 text-center text-sm text-muted-foreground">
-        Don't have an account?{" "}
-        <Link
-          to={
-            redirectTo
-              ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}`
-              : "/signup"
-          }
-          className="font-medium text-primary hover:underline"
-        >
-          Sign up
-        </Link>
-      </p>
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? "Logging in..." : "Log In"}
+        </Button>
+      </Form>
     </AuthShell>
   );
 }
