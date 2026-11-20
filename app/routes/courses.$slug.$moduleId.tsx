@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { data, isRouteErrorResponse } from "react-router";
 import { formatDuration } from "~/lib/utils";
+import { formatLessonCount } from "~/modules/lesson-count";
 
 function getCourseWithDetails(id: number) {
   const course = db
@@ -278,7 +279,7 @@ export default function ModuleDetail({ loaderData }: Route.ComponentProps) {
         <div className="mb-6">
           <div className="mb-1 flex items-center justify-between text-sm">
             <span className="text-muted-foreground">
-              {completedLessons} of {totalLessons} lessons completed
+              {completedLessons} of {formatLessonCount(totalLessons)} completed
             </span>
             <span className="font-medium">{moduleProgress}%</span>
           </div>

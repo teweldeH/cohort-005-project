@@ -30,6 +30,7 @@ import { formatPrice } from "~/lib/utils";
 import { resolveCountry } from "~/lib/country.server";
 import { calculatePppPrice } from "~/lib/ppp";
 import { StarRating } from "~/components/star-rating";
+import { formatLessonProgress } from "~/modules/lesson-count";
 
 function buildCourseQuery(
   search: string | null,
@@ -494,7 +495,10 @@ export default function CourseCatalog({ loaderData }: Route.ComponentProps) {
                   <CardContent className="pt-0">
                     <div className="mb-1 flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">
-                        {course.completedLessons} / {course.lessonCount} lessons
+                        {formatLessonProgress(
+                          course.completedLessons ?? 0,
+                          course.lessonCount
+                        )}
                       </span>
                       <span className="font-medium">{course.progress}%</span>
                     </div>
