@@ -1,11 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { runInNewContext } from "node:vm";
-import {
-  themeFromStorage,
-  themeOfRoot,
-  toggleTheme,
-  themeScript,
-} from "../index";
+import { themeOfRoot, toggleTheme, themeScript } from "../index";
 
 function fakeRoot(initial: string[] = []) {
   const classes = new Set(initial);
@@ -31,19 +26,6 @@ function fakeStorage(seed: Record<string, string> = {}) {
     setItem: (key: string, value: string) => void items.set(key, value),
   };
 }
-
-describe("themeFromStorage", () => {
-  it("reads a stored dark preference as dark", () => {
-    expect(themeFromStorage("dark")).toBe("dark");
-  });
-
-  it.each([["light"], [null], [undefined], [""], ["Dark"]])(
-    "treats %j as light",
-    (stored) => {
-      expect(themeFromStorage(stored)).toBe("light");
-    }
-  );
-});
 
 describe("themeOfRoot", () => {
   it("is dark when the root carries the dark class", () => {

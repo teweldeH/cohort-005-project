@@ -1,6 +1,10 @@
+/**
+ * Light and dark mode: how the choice is stored, applied to the page and
+ * restored before first paint. Every theme toggle goes through here, so the
+ * landing page and the app shell can never disagree about it.
+ */
 import {
   oppositeTheme,
-  parseTheme,
   writeTheme,
   themeBootScript,
   type Theme,
@@ -8,18 +12,7 @@ import {
   type ThemeStorage,
 } from "./lib/theme";
 
-export type { Theme };
-
-/**
- * Light and dark mode: how the choice is stored, applied to the page and
- * restored before first paint. Every theme toggle goes through here, so the
- * landing page and the app shell can never disagree about it.
- */
-
-/** The theme a stored preference names; anything unrecognised is light. */
-export function themeFromStorage(stored: string | null | undefined): Theme {
-  return parseTheme(stored);
-}
+export type { Theme, ThemeRoot, ThemeStorage };
 
 /** The theme the page is showing, read from the root element's classes. */
 export function themeOfRoot(root: {

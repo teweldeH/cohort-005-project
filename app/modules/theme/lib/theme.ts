@@ -8,10 +8,6 @@ export type ThemeRoot = {
 
 export type ThemeStorage = { setItem(key: string, value: string): void };
 
-export function parseTheme(stored: string | null | undefined): Theme {
-  return stored === "dark" ? "dark" : "light";
-}
-
 export function oppositeTheme(theme: Theme): Theme {
   return theme === "dark" ? "light" : "dark";
 }
