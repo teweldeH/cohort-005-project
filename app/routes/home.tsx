@@ -109,6 +109,7 @@ const navLink =
 
 function Header({ currentUser }: { currentUser: CurrentUser }) {
   const { isDark, toggle } = useDarkMode();
+  const themeLabel = isDark ? "Switch to light mode" : "Switch to dark mode";
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
@@ -121,7 +122,8 @@ function Header({ currentUser }: { currentUser: CurrentUser }) {
           <button
             onClick={toggle}
             className="rounded-md p-2 text-muted-foreground transition-colors hover:text-foreground"
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            title={themeLabel}
+            aria-label={themeLabel}
           >
             {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </button>
@@ -167,7 +169,8 @@ function Hero({
       <div className="mx-auto max-w-6xl px-6 pt-24 pb-28 text-center">
         <span className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white/70 px-4 py-1.5 text-sm font-medium text-indigo-700 shadow-sm dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
           <Sparkles className="size-4" />
-          {totalCourses} courses from working instructors
+          {totalCourses} {totalCourses === 1 ? "course" : "courses"} from
+          working instructors
         </span>
         <h1 className="mt-8 text-5xl font-extrabold tracking-tight sm:text-7xl">
           Learn to code,
@@ -289,7 +292,8 @@ function CourseCard({ course }: { course: FeaturedCourse }) {
             </span>
             <span className="flex items-center gap-1">
               <BookOpen className="size-3" />
-              {course.lessonCount} lessons
+              {course.lessonCount}{" "}
+              {course.lessonCount === 1 ? "lesson" : "lessons"}
             </span>
           </span>
         </CardFooter>
