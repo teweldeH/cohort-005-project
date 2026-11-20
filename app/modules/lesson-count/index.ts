@@ -1,6 +1,5 @@
 import { lessonNoun } from "./lib/plural";
 
-/** "1 lesson", "2 lessons", "0 lessons". */
 export function formatLessonCount(count: number): string {
   return `${count} ${lessonNoun(count)}`;
 }
