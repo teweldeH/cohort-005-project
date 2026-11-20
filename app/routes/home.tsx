@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { useState, useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import type { Route } from "./+types/home";
 import { Button } from "~/components/ui/button";
 import {
@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { CourseImage } from "~/components/course-image";
 import { DevUI } from "~/components/dev-ui";
+import { Logo } from "~/components/logo";
+import { useTheme } from "~/components/use-theme";
 import { getCurrentUserId, getDevCountry } from "~/lib/session";
 import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { eq } from "drizzle-orm";
@@ -31,8 +33,8 @@ import {
 } from "~/modules/landing-page/index.server";
 import { formatLessonCount } from "~/modules/lesson-count";
 
-// The accent is scoped to this page on purpose: the app.css tokens are shared
-// by every shadcn component, so a brand colour there is its own decision.
+// The flat brand indigo is --primary in app.css, shared by every page.
+// Gradients are a marketing flourish, kept to this page.
 const accentText =
   "bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-fuchsia-400";
 const accentButton =
@@ -72,44 +74,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-function useDarkMode() {
-  const [isDark, setIsDark] = useState(false);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains("dark"));
-  }, []);
-
-  function toggle() {
-    const next = !isDark;
-    setIsDark(next);
-    document.documentElement.classList.toggle("dark", next);
-    try {
-      localStorage.setItem("cadence-theme", next ? "dark" : "light");
-    } catch {}
-  }
-
-  return { isDark, toggle };
-}
-
-function Logo() {
-  return (
-    <Link
-      to="/"
-      className="flex items-center gap-2 text-xl font-bold tracking-tight"
-    >
-      <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 text-white">
-        <GraduationCap className="size-5" />
-      </span>
-      Cadence
-    </Link>
-  );
-}
-
 const navLink =
   "text-sm font-medium text-muted-foreground transition-colors hover:text-foreground";
 
 function Header({ currentUser }: { currentUser: CurrentUser }) {
-  const { isDark, toggle } = useDarkMode();
+  const { isDark, toggle } = useTheme();
   const themeLabel = isDark ? "Switch to light mode" : "Switch to dark mode";
 
   return (

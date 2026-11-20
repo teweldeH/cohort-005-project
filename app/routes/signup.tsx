@@ -11,6 +11,7 @@ import type { Route } from "./+types/signup";
 import { UserRole, users } from "~/db/schema";
 import { setCurrentUserId, getCurrentUserId } from "~/lib/session";
 import { parseFormData } from "~/lib/validation";
+import { Logo } from "~/components/logo";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Card, CardContent } from "~/components/ui/card";
@@ -104,12 +105,10 @@ export default function SignUp() {
   const redirectTo = searchParams.get("redirectTo");
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-primary/10 via-background to-background p-6">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <Link to="/" className="text-2xl font-bold tracking-tight">
-            Cadence
-          </Link>
+          <Logo className="justify-center text-2xl" />
           <h1 className="mt-4 text-xl font-semibold">Create your account</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Start learning today
