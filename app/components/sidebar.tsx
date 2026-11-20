@@ -1,8 +1,9 @@
 import { NavLink, Form } from "react-router";
-import { useState, useEffect } from "react";
 import { cn } from "~/lib/utils";
 import { UserRole } from "~/db/schema";
 import { UserAvatar } from "~/components/user-avatar";
+import { Logo } from "~/components/logo";
+import { useTheme } from "~/components/use-theme";
 import { NotificationBell } from "~/components/notification-feed";
 import {
   Bookmark,
@@ -127,27 +128,12 @@ export function Sidebar({
   isTeamAdmin = false,
 }: SidebarProps) {
   const currentUserRole = currentUser?.role ?? null;
-  const [isDark, setIsDark] = useState(false);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains("dark"));
-  }, []);
-
-  function toggleDarkMode() {
-    const next = !isDark;
-    setIsDark(next);
-    document.documentElement.classList.toggle("dark", next);
-    try {
-      localStorage.setItem("cadence-theme", next ? "dark" : "light");
-    } catch {}
-  }
+  const { isDark, toggle: toggleDarkMode } = useTheme();
 
   return (
     <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
-        <NavLink to="/" className="text-lg font-bold tracking-tight">
-          Cadence
-        </NavLink>
+        <Logo size="sm" />
         {currentUser && <NotificationBell />}
       </div>
 
